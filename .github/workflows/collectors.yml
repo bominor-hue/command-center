@@ -1,0 +1,64 @@
+# The collectors that feed the wall. Each records its run in cc.feed_run, so a job that stops
+# running shows up on the wall's feed footer (and as an alert at twice its schedule).
+# Every job can also be run by hand from the Actions tab ("Run workflow").
+# Needs repository secrets (Settings > Secrets and variables > Actions):
+#   SUPABASE_PROJECT_REF   same as Pivot Log's
+#   SUPABASE_SERVICE_KEY   Supabase > Project Settings > API Keys > secret key
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
+#                          an OAuth client with read-only Drive and Calendar scopes (see README)
+name: Collectors
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Google: calendar, Deere CSV, filer logs
+    - cron: '7 * * * *'     # hourly: NWS forecast, news
+    - cron: '0 9 * * 1'     # Monday 4-5 am: Field Master (also on every change to the CSV)
+  push:
+    branches: [main]
+    paths: [data/field_master_2026.csv]
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Which collector'
+        type: choice
+        options: [all, google, nws, news, field-master]
+        default: all
+env:
+  SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
+  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+jobs:
+  google:
+    if: github.event.schedule == '*/15 * * * *' || inputs.job == 'all' || inputs.job == 'google'
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python3 collectors/google_feeds.py
+  nws:
+    if: github.event.schedule == '7 * * * *' || inputs.job == 'all' || inputs.job == 'nws'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python3 collectors/nws.py
+  news:
+    if: github.event.schedule == '7 * * * *' || inputs.job == 'all' || inputs.job == 'news'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python3 collectors/news.py
+  field-master:
+    if: github.event_name == 'push' || github.event.schedule == '0 9 * * 1' || inputs.job == 'all' || inputs.job == 'field-master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python3 collectors/field_master.py

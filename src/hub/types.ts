@@ -1,0 +1,78 @@
+// Shapes the wall reads. Hub tables are in supabase/cc_hub.sql; Pivot Log's tables keep their own
+// shapes (one JSON document per row in `data`, see bominor-hue/pivot-log src/db.ts).
+
+export type Crop = 'Cotton' | 'Peanuts' | 'Corn' | string
+export type Season = 'off' | 'planting' | 'growing' | 'harvest'
+
+/** A source record behind a number: every number on the wall opens one of these. */
+export interface SourceRef { source: string; id?: string | null; url?: string | null }
+
+export interface FieldRow {
+  id: string; cropYear: number; farm: string; name: string; crop: Crop
+  water: 'Irrigated' | 'Dryland'; plannedAcres: number
+  producer: string | null; fsn: string | null; county: string | null
+}
+
+/** The latest Deere operation on a field, from the weekly Ops Center CSV. */
+export interface LastOperation { type: string; date: string; product: string | null; acres: number | null; source: SourceRef }
+
+/** Pivot Log rows (the `data` document). */
+export interface Sourced<T = number | string> { value: T; source: string; at: string }
+export interface PivotDoc { id: string; farmId: string; name: string; lat?: number | null; lon?: number | null; profile: Record<string, Sourced> }
+export interface PivotFieldDoc { id: string; farmId: string; name: string; pivotId: string | null }
+export interface FarmDoc { id: string; name: string }
+export interface EntryRow {
+  id: string; pivot_id: string; action: 'on' | 'off' | 'run' | 'void' | 'note'
+  happened_at: string; who_name: string; how: string
+  percent_timer: number | null; planned_stop: 'lap' | 'position' | 'keep' | null
+  start_deg: number | null; stop_deg: number | null; direction: 'forward' | 'reverse' | null
+  start_at: string | null; stop_at: string | null; corrects_id: string | null
+}
+export interface RainDoc { pivotId: string; date: string; inches: number; source: string }
+
+export interface ForecastDay { date: string; name: string; hi: number | null; lo: number | null; rainIn: number; pop: number | null; short: string }
+export interface FarmForecast { farm: string; days: ForecastDay[]; sprayWindow: string | null; asOf: string; source: SourceRef }
+
+export type Level = 'red' | 'amber' | 'info'
+export interface Alert { id: string; rule: string; level: Level; title: string; why: string; key: string | null; records: SourceRef[]; openedAt: string }
+export interface Brief { writtenAt: string; text: string; needsYou: { title: string; why: string }[] }
+
+export type AgentStatus = 'idle' | 'working' | 'watching' | 'needs_you' | 'failed' | 'paused' | 'off'
+export interface Agent { id: string; name: string; scope: string; schedule: string; enabled: boolean; status: AgentStatus; nowDoing: string | null }
+export type StepState = 'done' | 'running' | 'waiting' | 'next'
+export interface Step { state: StepState; label: string; detail: string }
+export type TaskStatus = 'queued' | 'running' | 'needs_you' | 'done' | 'failed' | 'cancelled'
+export interface Task {
+  id: number; agentId: string; text: string; status: TaskStatus; steps: Step[]
+  result: string | null; resultKind: 'note' | 'document' | 'approval' | null; resultUrl: string | null
+  error: string | null; createdAt: string; finishedAt: string | null
+}
+export interface FeedHealth { id: string; name: string; lastOk: string | null; overdue: boolean; lastError: string | null }
+export interface Deadline { id: string; title: string; date: string; url: string | null; source: string }
+export interface NewsItem { id: string; title: string; source: string; tag: string; url: string; publishedAt: string }
+
+/** Everything the wall shows, and whether it came from the hub or the built-in sample. */
+export interface HubState {
+  live: boolean // false = sample data: every panel says so
+  loadedAt: string
+  error: string | null
+  fields: FieldRow[]
+  lastOps: Record<string, LastOperation> // by field id
+  harvested: Record<string, { acres: number; asOf: string; source: SourceRef }> // by field id
+  pivots: PivotDoc[]
+  pivotFields: PivotFieldDoc[]
+  farms: FarmDoc[]
+  entries: EntryRow[]
+  rain: RainDoc[]
+  forecasts: FarmForecast[]
+  alerts: Alert[]
+  brief: Brief | null
+  agents: Agent[]
+  tasks: Task[]
+  approvalsWaiting: number
+  feeds: FeedHealth[]
+  news: NewsItem[]
+  deadlines: Deadline[] // Calendar, next 60 days
+  agentsPaused: boolean
+  signedInAsOffice: boolean
+}

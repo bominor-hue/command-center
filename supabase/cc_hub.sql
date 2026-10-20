@@ -1,0 +1,268 @@
+-- Farm Command Center hub: the `cc` schema, in the same Supabase project as Pivot Log.
+--
+-- Pivot Log's own tables (entry, pivot, field, rain_day, weather_day, balance_daily, ...) stay in
+-- `public` and are read as they are. Everything the command center adds lives in `cc`, so the two
+-- repos never touch each other's tables. This file is applied by .github/workflows/hub-schema.yml
+-- with psql (not `supabase db push`, which keeps one migration history per project and belongs to
+-- Pivot Log). Every statement is safe to run again.
+--
+-- Who can do what (reuses Pivot Log's logins and its is_office() check):
+--   office    reads everything, dispatches tasks, marks alerts handled, pauses agents
+--   any other signed-in login (the wall's view-only login, viewers, crew) reads everything
+--   collectors, agents and the MCP server write with the service key, which skips row security
+
+create schema if not exists cc;
+grant usage on schema cc to authenticated, service_role;
+
+-- The farm's keys -----------------------------------------------------------------------------------
+-- One row per field per crop year, loaded from the Field Master (collectors/field_master.py).
+create table if not exists cc.field (
+  id text primary key,                 -- '2026|A&B #5W'
+  crop_year int not null,
+  farm text not null,
+  name text not null,
+  crop text,
+  water text check (water in ('Irrigated', 'Dryland')),
+  planned_acres numeric,
+  producer text,                       -- the FSA producer, as written in the crosswalk
+  fsn text,
+  county text,
+  source text not null,                -- 'Field Master 2026.csv'
+  updated_at timestamptz not null default now()
+);
+create index if not exists field_year on cc.field (crop_year, farm);
+
+-- Latest value per key and metric (forecast by farm, harvest acres by field, last operation by field).
+create table if not exists cc.snapshot (
+  key text not null,                   -- 'farm:A&B Farm', 'field:2026|A&B #5W', 'farm-all'
+  metric text not null,                -- 'forecast', 'harvested_acres', 'last_operation', ...
+  value jsonb not null,
+  source text not null,                -- system it came from: 'NWS', 'Deere CSV', 'Pivot Log'
+  source_id text,                      -- its id there
+  source_url text,                     -- a link that opens the source record
+  as_of timestamptz not null,          -- when the source says this was true
+  updated_at timestamptz not null default now(),
+  primary key (key, metric)
+);
+
+-- Timestamped facts (an operation, a delivery, a filed document).
+create table if not exists cc.event (
+  id text primary key,                 -- source system + its id, so a re-run never duplicates
+  kind text not null,
+  key text,
+  happened_at timestamptz not null,
+  title text not null,
+  detail jsonb not null default '{}',
+  source text not null, source_id text, source_url text,
+  created_at timestamptz not null default now()
+);
+create index if not exists event_kind_time on cc.event (kind, happened_at desc);
+
+-- Alerts: red, amber, info. One open row per rule and key; re-firing updates it.
+create table if not exists cc.alert (
+  id text primary key,                 -- rule + key, e.g. 'pivot-running|<pivot id>'
+  rule text not null,
+  level text not null check (level in ('red', 'amber', 'info')),
+  title text not null,
+  why text not null,                   -- what fired it, in a sentence
+  key text,
+  records jsonb not null default '[]', -- [{source, id, url}] behind it
+  opened_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  cleared_at timestamptz,              -- the rule stopped firing
+  handled_at timestamptz, handled_by text,
+  snoozed_until timestamptz
+);
+create index if not exists alert_open on cc.alert (level) where cleared_at is null and handled_at is null;
+
+-- The Brief agent's three sentences, 6 AM and 6 PM.
+create table if not exists cc.brief (
+  id bigint generated always as identity primary key,
+  written_at timestamptz not null default now(),
+  text text not null,
+  needs_you jsonb not null default '[]', -- [{title, why, source}]
+  agent_run_id bigint
+);
+
+-- Agents and their work ------------------------------------------------------------------------------
+create table if not exists cc.agent (
+  id text primary key,                 -- 'brief', 'water', 'clerk', 'research', ...
+  name text not null,
+  scope text not null,
+  schedule text not null,
+  enabled boolean not null default true, -- false = not built yet (shown as "v2")
+  status text not null default 'idle' check (status in ('idle', 'working', 'watching', 'needs_you', 'failed', 'paused', 'off')),
+  now_doing text,
+  sort int not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+-- Work Bo hands an agent from the TASK panel. A task given to two agents is two rows.
+create table if not exists cc.task (
+  id bigint generated always as identity primary key,
+  agent_id text not null references cc.agent(id),
+  text text not null,
+  status text not null default 'queued' check (status in ('queued', 'running', 'needs_you', 'done', 'failed', 'cancelled')),
+  steps jsonb not null default '[]',   -- [{state: done|running|waiting|next, label, detail}]
+  result text,                          -- the write-up, for a note result
+  result_kind text check (result_kind in ('note', 'document', 'approval')),
+  result_url text,
+  error text,
+  created_by text,
+  created_at timestamptz not null default now(),
+  started_at timestamptz, finished_at timestamptz,
+  cancel_requested boolean not null default false
+);
+create index if not exists task_recent on cc.task (created_at desc);
+
+-- Every agent run (scheduled or a task): what it read, decided, wrote and asked for.
+create table if not exists cc.agent_run (
+  id bigint generated always as identity primary key,
+  agent_id text not null references cc.agent(id),
+  task_id bigint references cc.task(id),
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  ok boolean,
+  log jsonb not null default '[]',     -- [{at, kind: read|decide|write|ask|error, text}]
+  tokens_in int, tokens_out int
+);
+
+-- Outside actions wait here for Bo (v2: the Books agent). Kept in v1 so the count shows on the wall.
+create table if not exists cc.approval (
+  id bigint generated always as identity primary key,
+  agent_id text not null references cc.agent(id),
+  task_id bigint references cc.task(id),
+  action text not null,                -- 'email', 'filing', 'bill', 'price_alert'
+  summary text not null,
+  preview jsonb not null default '{}',
+  status text not null default 'waiting' check (status in ('waiting', 'approved', 'rejected', 'expired', 'done')),
+  created_at timestamptz not null default now(),
+  decided_at timestamptz, decided_by text
+);
+
+-- One row: the Pause all agents switch.
+create table if not exists cc.control (
+  id int primary key default 1 check (id = 1),
+  agents_paused boolean not null default false,
+  paused_at timestamptz, paused_by text
+);
+insert into cc.control (id) values (1) on conflict do nothing;
+
+-- Pipeline health --------------------------------------------------------------------------------------
+create table if not exists cc.feed (
+  id text primary key,                 -- 'nws', 'news', 'field-master', 'deere-csv', 'nutrien-filer', ...
+  name text not null,
+  every_minutes int not null,          -- expected schedule; overdue at twice this
+  sort int not null default 0
+);
+create table if not exists cc.feed_run (
+  id bigint generated always as identity primary key,
+  feed_id text not null references cc.feed(id),
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  ok boolean,
+  rows int,
+  error text
+);
+create index if not exists feed_run_latest on cc.feed_run (feed_id, started_at desc);
+
+-- Records a collector could not key to a farm or field: held, not dropped.
+create table if not exists cc.exception (
+  id text primary key,
+  feed_id text not null,
+  reason text not null,
+  record jsonb not null,
+  seen_at timestamptz not null default now(),
+  resolved_at timestamptz
+);
+
+-- News picked for the NEWS panel.
+create table if not exists cc.news (
+  id text primary key,                 -- the story's link
+  title text not null,
+  source text not null,
+  tag text not null,                   -- MARKETS, WEATHER, USDA, PEANUTS, COTTON, GEORGIA, PESTS
+  url text not null,
+  published_at timestamptz not null,
+  score numeric not null default 0,    -- higher is more useful to this farm
+  hidden boolean not null default false, -- thumbs down
+  created_at timestamptz not null default now()
+);
+create index if not exists news_recent on cc.news (published_at desc);
+
+-- Latest successful and latest run per feed, for the footer strip.
+create or replace view cc.feed_health with (security_invoker = true) as
+select f.id, f.name, f.every_minutes, f.sort,
+  (select max(r.finished_at) from cc.feed_run r where r.feed_id = f.id and r.ok) as last_ok,
+  (select r.error from cc.feed_run r where r.feed_id = f.id order by r.started_at desc limit 1) as last_error,
+  coalesce((select max(r.finished_at) from cc.feed_run r where r.feed_id = f.id and r.ok)
+    < now() - make_interval(mins => 2 * f.every_minutes), true) as overdue
+from cc.feed f;
+
+-- Seed rows ----------------------------------------------------------------------------------------------
+insert into cc.agent (id, name, scope, schedule, enabled, status, now_doing, sort) values
+  ('brief', 'Brief', 'Every hub table, weather, calendar', '6 AM and 6 PM, and on demand', true, 'idle', null, 1),
+  ('water', 'Water', 'Pivot Log, NOAA rain', 'Every 15 minutes', true, 'watching', null, 2),
+  ('clerk', 'Filing clerk', 'Gmail, Downloads, AI Data (the existing filers)', 'Every 15 minutes', true, 'watching', null, 3),
+  ('news', 'News', 'USDA, UGA, NWS, farm press', 'Hourly', true, 'watching', null, 4),
+  ('research', 'Research', 'Web, the hub', 'On demand', true, 'idle', 'Ready for a task', 5),
+  ('field', 'Field ops', 'Deere Ops Center', 'Every 15 minutes in season', false, 'off', 'Waits on the Deere connector', 6),
+  ('books', 'Books', 'QuickBooks, Nutrien, Perry Bros.', 'Daily', false, 'off', 'Comes with the approval queue (v2)', 7),
+  ('markets', 'Markets', 'Prices, marketing sheet', 'Market hours', false, 'off', 'Comes with the price feed (v3)', 8)
+on conflict (id) do update set name = excluded.name, scope = excluded.scope, schedule = excluded.schedule, sort = excluded.sort;
+
+insert into cc.feed (id, name, every_minutes, sort) values
+  ('field-master', 'FIELD MASTER', 10080, 1),
+  ('pivot-log', 'PIVOT LOG', 60, 2),
+  ('noaa-rain', 'RAIN+ETO', 1440, 3),
+  ('nws', 'NWS FORECAST', 60, 4),
+  ('deere-csv', 'DEERE CSV', 10080, 5),
+  ('nutrien-filer', 'NUTRIEN', 1440, 6),
+  ('perry-filer', 'PERRY BROS', 10080, 7),
+  ('calendar', 'CALENDAR', 15, 8),
+  ('news', 'NEWS', 60, 9),
+  ('water-rules', 'WATER AGENT', 15, 10)
+on conflict (id) do update set name = excluded.name, every_minutes = excluded.every_minutes, sort = excluded.sort;
+
+-- Row security ---------------------------------------------------------------------------------------------
+do $$ declare t text; begin
+  foreach t in array array['field','snapshot','event','alert','brief','agent','task','agent_run','approval','control','feed','feed_run','exception','news'] loop
+    execute format('alter table cc.%I enable row level security', t);
+    execute format('drop policy if exists %I on cc.%I', t || '_read', t);
+    execute format('create policy %I on cc.%I for select to authenticated using (true)', t || '_read', t);
+    execute format('grant select on cc.%I to authenticated', t);
+    execute format('grant all on cc.%I to service_role', t);
+  end loop;
+end $$;
+grant select on cc.feed_health to authenticated, service_role;
+grant usage on all sequences in schema cc to authenticated, service_role;
+
+-- The office dispatches and cancels tasks, marks alerts handled, hides a story, flips Pause all agents.
+drop policy if exists task_office_insert on cc.task;
+create policy task_office_insert on cc.task for insert to authenticated with check (public.is_office() and status = 'queued');
+drop policy if exists task_office_cancel on cc.task;
+create policy task_office_cancel on cc.task for update to authenticated using (public.is_office()) with check (public.is_office());
+grant insert on cc.task to authenticated;
+grant update (cancel_requested) on cc.task to authenticated;
+
+drop policy if exists alert_office on cc.alert;
+create policy alert_office on cc.alert for update to authenticated using (public.is_office()) with check (public.is_office());
+grant update (handled_at, handled_by, snoozed_until) on cc.alert to authenticated;
+
+drop policy if exists news_office on cc.news;
+create policy news_office on cc.news for update to authenticated using (public.is_office()) with check (public.is_office());
+grant update (hidden) on cc.news to authenticated;
+
+drop policy if exists control_office on cc.control;
+create policy control_office on cc.control for update to authenticated using (public.is_office()) with check (public.is_office());
+grant update (agents_paused, paused_at, paused_by) on cc.control to authenticated;
+
+-- Live updates to the wall (Supabase Realtime).
+do $$ declare t text; begin
+  foreach t in array array['alert','brief','agent','task','control','feed_run','news','snapshot'] loop
+    begin
+      execute format('alter publication supabase_realtime add table cc.%I', t);
+    exception when duplicate_object then null; when undefined_object then null;
+    end;
+  end loop;
+end $$;

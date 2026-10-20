@@ -1,0 +1,105 @@
+{
+ "_note": "Farm centers (mean of pivot locations in the Pivot Log 2026 demo file). Used for the NWS forecast by farm.",
+ "farms": [
+  {
+   "farm": "A&B Farm",
+   "lat": 31.9405,
+   "lon": -84.016
+  },
+  {
+   "farm": "Akin Farm",
+   "lat": 32.0162,
+   "lon": -84.0393
+  },
+  {
+   "farm": "Arnold Farm",
+   "lat": 32.0802,
+   "lon": -84.3113
+  },
+  {
+   "farm": "Brown Small Farm",
+   "lat": 32.0569,
+   "lon": -84.0331
+  },
+  {
+   "farm": "Calvary Farm",
+   "lat": 31.9619,
+   "lon": -84.1191
+  },
+  {
+   "farm": "Chicken House Farm",
+   "lat": 32.0533,
+   "lon": -84.3878
+  },
+  {
+   "farm": "Deseret Farm",
+   "lat": 31.9657,
+   "lon": -84.0139
+  },
+  {
+   "farm": "Dream Farm",
+   "lat": 32.1135,
+   "lon": -84.3891
+  },
+  {
+   "farm": "Esperanza Farm",
+   "lat": 32.131,
+   "lon": -84.1768
+  },
+  {
+   "farm": "Fletcher Farm",
+   "lat": 32.1399,
+   "lon": -84.2306
+  },
+  {
+   "farm": "Hodge's Farm",
+   "lat": 32.133,
+   "lon": -84.1282
+  },
+  {
+   "farm": "Hodges Farm",
+   "lat": 32.1339,
+   "lon": -84.1116
+  },
+  {
+   "farm": "Horne Farm",
+   "lat": 32.1349,
+   "lon": -84.2044
+  },
+  {
+   "farm": "JBW Farm",
+   "lat": 32.0635,
+   "lon": -83.9987
+  },
+  {
+   "farm": "Limecreek Farm",
+   "lat": 32.0215,
+   "lon": -84.0016
+  },
+  {
+   "farm": "Marshall Farm",
+   "lat": 32.0391,
+   "lon": -84.0567
+  },
+  {
+   "farm": "Perry Brothers Farm",
+   "lat": 31.9331,
+   "lon": -84.0335
+  },
+  {
+   "farm": "Pinehill Farm",
+   "lat": 32.1769,
+   "lon": -84.2254
+  },
+  {
+   "farm": "Reeves Farm",
+   "lat": 32.1109,
+   "lon": -84.1111
+  },
+  {
+   "farm": "Sheppherd farm",
+   "lat": 32.038,
+   "lon": -84.0149
+  }
+ ]
+}
