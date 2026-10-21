@@ -1,0 +1,21 @@
+# Applies supabase/cc_hub.sql (the command center's own `cc` schema) to the farm database.
+# The file is idempotent, so it runs on every change and can be re-run by hand from the Actions tab.
+# It is applied with psql rather than `supabase db push` because Pivot Log owns that project's
+# migration history, and the hub must never add to it.
+# Needs a repository secret (Settings > Secrets and variables > Actions):
+#   SUPABASE_DB_URL   Supabase > Connect > Session pooler connection string, with the database password
+name: Hub schema
+on:
+  push:
+    branches: [main]
+    paths: [supabase/cc_hub.sql]
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y postgresql-client
+      - env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/cc_hub.sql

@@ -1,0 +1,11 @@
+{
+  "_note": "RSS/Atom feeds the News collector reads (collectors/news.py). A feed that fails shows in the run log and the others still load. Add or remove freely; 'tag' is the default when no keyword rule matches.",
+  "sources": [
+    { "name": "USDA", "url": "https://www.usda.gov/rss/latest-releases.xml", "tag": "USDA" },
+    { "name": "Cotton Grower", "url": "https://www.cottongrower.com/feed/", "tag": "COTTON" },
+    { "name": "Peanut Grower", "url": "https://www.peanutgrower.com/feed/", "tag": "PEANUTS" },
+    { "name": "Brownfield", "url": "https://www.brownfieldagnews.com/feed/", "tag": "MARKETS" },
+    { "name": "Southeast AgNet", "url": "https://southeastagnet.com/feed/", "tag": "GEORGIA" },
+    { "name": "UGA CAES News", "url": "https://newswire.caes.uga.edu/rss.xml", "tag": "GEORGIA" }
+  ]
+}

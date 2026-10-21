@@ -1,0 +1,8 @@
+# Netlify builds the wall from this repo and runs netlify/functions (agents and the filer heartbeat).
+# Site configuration > Environment variables: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_PIVOT_LOG_URL,
+# VITE_VISITOR_PIN, and for the agents SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY, AGENT_TICK_KEY, HEARTBEAT_KEY.
+[build]
+  command = "npm ci && npm run build"
+  publish = "dist"
+[build.environment]
+  NODE_VERSION = "22"
