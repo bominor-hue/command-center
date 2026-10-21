@@ -1,18 +1,67 @@
--- Farm Command Center hub: the `cc` schema, in the same Supabase project as Pivot Log.
+-- Farm Command Center hub: the `cc` schema in its own Supabase project (the farm hub), apart from
+-- Pivot Log's project.
 --
--- Pivot Log's own tables (entry, pivot, field, rain_day, weather_day, balance_daily, ...) stay in
--- `public` and are read as they are. Everything the command center adds lives in `cc`, so the two
--- repos never touch each other's tables. This file is applied by .github/workflows/hub-schema.yml
--- with psql (not `supabase db push`, which keeps one migration history per project and belongs to
--- Pivot Log). Every statement is safe to run again.
+-- Pivot Log stays its own app and database. What the hub needs from it (farms, pivots, pivot fields,
+-- recent on/off entries, radar rain) is copied in every 5 minutes by netlify/functions/pivot-sync.mts
+-- into the pl_* tables below, signing in to Pivot Log as a read-only viewer. The hub never writes to
+-- Pivot Log. This file is applied by .github/workflows/hub-schema.yml with psql; every statement is
+-- safe to run again.
 --
--- Who can do what (reuses Pivot Log's logins and its is_office() check):
---   office    reads everything, dispatches tasks, marks alerts handled, pauses agents
---   any other signed-in login (the wall's view-only login, viewers, crew) reads everything
+-- Who can do what (the hub's own logins):
+--   office    the first email-link sign-in claims it (same rule as Pivot Log); reads everything,
+--             dispatches tasks, marks alerts handled, pauses agents. More office emails: add rows to
+--             cc.office_user.
+--   any other signed-in login (the wall's view-only login) reads everything
 --   collectors, agents and the MCP server write with the service key, which skips row security
 
 create schema if not exists cc;
 grant usage on schema cc to authenticated, service_role;
+
+-- Office logins -------------------------------------------------------------------------------------
+create table if not exists cc.office_user (email text primary key, added_at timestamptz not null default now());
+
+create or replace function cc.is_office() returns boolean language sql stable security definer set search_path = cc as $$
+  select exists (select 1 from cc.office_user where email = lower(auth.jwt() ->> 'email'))
+$$;
+
+-- The first person to sign in by email link becomes the office. Never a password login (the wall).
+create or replace function cc.claim_office() returns boolean language plpgsql security definer set search_path = cc as $$
+declare me text := lower(auth.jwt() ->> 'email');
+begin
+  if me is null then return false; end if;
+  if exists (select 1 from cc.office_user where email = me) then return true; end if;
+  if exists (select 1 from cc.office_user) then return false; end if;
+  if exists (select 1 from jsonb_array_elements(coalesce(auth.jwt() -> 'amr', '[]'::jsonb)) a where a ->> 'method' = 'password') then return false; end if;
+  insert into cc.office_user (email) values (me);
+  return true;
+end $$;
+revoke all on function cc.claim_office() from public, anon;
+grant execute on function cc.is_office(), cc.claim_office() to authenticated;
+
+-- Copied from Pivot Log ---------------------------------------------------------------------------------
+-- Kept in Pivot Log's own shapes (its master lists are {id, data} documents) so the hub reads them with
+-- the same rules as Pivot Log. Written only by the pivot sync.
+create table if not exists cc.pl_farm (id text primary key, data jsonb not null, updated_at timestamptz not null);
+create table if not exists cc.pl_pivot (id text primary key, data jsonb not null, updated_at timestamptz not null);
+create table if not exists cc.pl_field (id text primary key, data jsonb not null, updated_at timestamptz not null);
+create table if not exists cc.pl_rain_day (id text primary key, data jsonb not null, updated_at timestamptz not null, updated_by text);
+create table if not exists cc.pl_entry (
+  id uuid primary key,
+  pivot_id text not null,
+  action text not null,
+  happened_at timestamptz not null,
+  received_at timestamptz not null,
+  who_name text not null,
+  how text not null,
+  percent_timer numeric,
+  planned_stop text,
+  start_deg numeric, stop_deg numeric,
+  direction text,
+  start_at timestamptz, stop_at timestamptz,
+  corrects_id uuid
+);
+create index if not exists pl_entry_happened on cc.pl_entry (happened_at);
+create index if not exists pl_entry_received on cc.pl_entry (received_at);
 
 -- The farm's keys -----------------------------------------------------------------------------------
 -- One row per field per crop year, loaded from the Field Master (collectors/field_master.py).
@@ -202,7 +251,7 @@ from cc.feed f;
 -- Seed rows ----------------------------------------------------------------------------------------------
 insert into cc.agent (id, name, scope, schedule, enabled, status, now_doing, sort) values
   ('brief', 'Brief', 'Every hub table, weather, calendar', '6 AM and 6 PM, and on demand', true, 'idle', null, 1),
-  ('water', 'Water', 'Pivot Log, NOAA rain', 'Every 15 minutes', true, 'watching', null, 2),
+  ('water', 'Water', 'Pivot Log (copied every 5 min), NOAA rain', 'Every 15 minutes', true, 'watching', null, 2),
   ('clerk', 'Filing clerk', 'Gmail, Downloads, AI Data (the existing filers)', 'Every 15 minutes', true, 'watching', null, 3),
   ('news', 'News', 'USDA, UGA, NWS, farm press', 'Hourly', true, 'watching', null, 4),
   ('research', 'Research', 'Web, the hub', 'On demand', true, 'idle', 'Ready for a task', 5),
@@ -213,7 +262,7 @@ on conflict (id) do update set name = excluded.name, scope = excluded.scope, sch
 
 insert into cc.feed (id, name, every_minutes, sort) values
   ('field-master', 'FIELD MASTER', 10080, 1),
-  ('pivot-log', 'PIVOT LOG', 60, 2),
+  ('pivot-log', 'PIVOT LOG', 10, 2),   -- the pivot sync runs every 5 min; late after 20
   ('noaa-rain', 'RAIN+ETO', 1440, 3),
   ('nws', 'NWS FORECAST', 60, 4),
   ('deere-csv', 'DEERE CSV', 10080, 5),
@@ -226,7 +275,7 @@ on conflict (id) do update set name = excluded.name, every_minutes = excluded.ev
 
 -- Row security ---------------------------------------------------------------------------------------------
 do $$ declare t text; begin
-  foreach t in array array['field','snapshot','event','alert','brief','agent','task','agent_run','approval','control','feed','feed_run','exception','news'] loop
+  foreach t in array array['field','snapshot','event','alert','brief','agent','task','agent_run','approval','control','feed','feed_run','exception','news','office_user','pl_farm','pl_pivot','pl_field','pl_rain_day','pl_entry'] loop
     execute format('alter table cc.%I enable row level security', t);
     execute format('drop policy if exists %I on cc.%I', t || '_read', t);
     execute format('create policy %I on cc.%I for select to authenticated using (true)', t || '_read', t);
@@ -239,27 +288,27 @@ grant usage on all sequences in schema cc to authenticated, service_role;
 
 -- The office dispatches and cancels tasks, marks alerts handled, hides a story, flips Pause all agents.
 drop policy if exists task_office_insert on cc.task;
-create policy task_office_insert on cc.task for insert to authenticated with check (public.is_office() and status = 'queued');
+create policy task_office_insert on cc.task for insert to authenticated with check (cc.is_office() and status = 'queued');
 drop policy if exists task_office_cancel on cc.task;
-create policy task_office_cancel on cc.task for update to authenticated using (public.is_office()) with check (public.is_office());
+create policy task_office_cancel on cc.task for update to authenticated using (cc.is_office()) with check (cc.is_office());
 grant insert on cc.task to authenticated;
 grant update (cancel_requested) on cc.task to authenticated;
 
 drop policy if exists alert_office on cc.alert;
-create policy alert_office on cc.alert for update to authenticated using (public.is_office()) with check (public.is_office());
+create policy alert_office on cc.alert for update to authenticated using (cc.is_office()) with check (cc.is_office());
 grant update (handled_at, handled_by, snoozed_until) on cc.alert to authenticated;
 
 drop policy if exists news_office on cc.news;
-create policy news_office on cc.news for update to authenticated using (public.is_office()) with check (public.is_office());
+create policy news_office on cc.news for update to authenticated using (cc.is_office()) with check (cc.is_office());
 grant update (hidden) on cc.news to authenticated;
 
 drop policy if exists control_office on cc.control;
-create policy control_office on cc.control for update to authenticated using (public.is_office()) with check (public.is_office());
+create policy control_office on cc.control for update to authenticated using (cc.is_office()) with check (cc.is_office());
 grant update (agents_paused, paused_at, paused_by) on cc.control to authenticated;
 
 -- Live updates to the wall (Supabase Realtime).
 do $$ declare t text; begin
-  foreach t in array array['alert','brief','agent','task','control','feed_run','news','snapshot'] loop
+  foreach t in array array['alert','brief','agent','task','control','feed_run','news','snapshot','pl_entry'] loop
     begin
       execute format('alter publication supabase_realtime add table cc.%I', t);
     exception when duplicate_object then null; when undefined_object then null;

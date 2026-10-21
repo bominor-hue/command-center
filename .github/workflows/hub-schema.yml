@@ -1,9 +1,8 @@
-# Applies supabase/cc_hub.sql (the command center's own `cc` schema) to the farm database.
+# Applies supabase/cc_hub.sql (the `cc` schema) to the farm hub's Supabase project.
 # The file is idempotent, so it runs on every change and can be re-run by hand from the Actions tab.
-# It is applied with psql rather than `supabase db push` because Pivot Log owns that project's
-# migration history, and the hub must never add to it.
+# One idempotent file applied with psql keeps this simple: no migration history to manage.
 # Needs a repository secret (Settings > Secrets and variables > Actions):
-#   SUPABASE_DB_URL   Supabase > Connect > Session pooler connection string, with the database password
+#   SUPABASE_DB_URL   farm hub > Connect > Session pooler connection string, with the database password
 name: Hub schema
 on:
   push:

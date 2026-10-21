@@ -2,8 +2,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { FIELD_MASTER, FIELD_MASTER_SOURCE } from './fieldMaster'
 import type { Agent, Alert, Deadline, EntryRow, FarmForecast, FeedHealth, FieldRow, HubState, LastOperation, NewsItem, Task } from './types'
 
-// The hub is the `cc` schema in the farm's Supabase project (supabase/cc_hub.sql); Pivot Log's tables
-// sit beside it in `public`. The wall only reads, plus the few office actions row security allows.
+// The hub is the `cc` schema in the farm hub's own Supabase project (supabase/cc_hub.sql). Pivot Log's
+// data arrives there as the pl_* copies. The wall only reads, plus the few office actions row security allows.
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -38,12 +38,13 @@ export async function loadHub(now = new Date()): Promise<HubState> {
     rows<any>(cc().from('news').select('*').eq('hidden', false).order('published_at', { ascending: false }).limit(40)),
     rows<any>(cc().from('control').select('*')),
     rows<any>(cc().from('event').select('id,title,happened_at,source,source_url').eq('kind', 'calendar').gte('happened_at', now.toISOString()).lte('happened_at', new Date(now.getTime() + 60 * 86400000).toISOString()).order('happened_at').limit(30)),
-    rows<any>(supabase.from('pivot').select('data')),
-    rows<any>(supabase.from('field').select('data')),
-    rows<any>(supabase.from('farm').select('data')),
-    rows<EntryRow>(supabase.from('entry').select(ENTRY_COLS).gte('happened_at', since21)),
-    rows<any>(supabase.from('rain_day').select('data').gte('data->>date', since2)),
-    supabase.rpc('is_office').then((r) => r.data === true, () => false),
+    rows<any>(cc().from('pl_pivot').select('data')),
+    rows<any>(cc().from('pl_field').select('data')),
+    rows<any>(cc().from('pl_farm').select('data')),
+    rows<EntryRow>(cc().from('pl_entry').select(ENTRY_COLS).gte('happened_at', since21)),
+    rows<any>(cc().from('pl_rain_day').select('data').gte('data->>date', since2)),
+    // The first email-link sign-in claims the office; after that this just says whether you are it.
+    cc().rpc('claim_office').then((r) => r.data === true, () => false),
   ])
 
   const fields: FieldRow[] = fieldRows.length
@@ -86,7 +87,7 @@ export function watchHub(onChange: () => void): () => void {
   for (const table of ['alert', 'brief', 'agent', 'task', 'control', 'feed_run', 'news', 'snapshot']) {
     ch.on('postgres_changes', { event: '*', schema: 'cc', table }, onChange)
   }
-  ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'entry' }, onChange)
+  ch.on('postgres_changes', { event: 'INSERT', schema: 'cc', table: 'pl_entry' }, onChange)
   ch.subscribe()
   return () => { supabase.removeChannel(ch) }
 }

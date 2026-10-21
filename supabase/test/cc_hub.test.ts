@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 
-// Runs supabase/cc_hub.sql on an in-memory Postgres with stand-ins for what it uses from the shared
-// project: Supabase's roles and Pivot Log's public.is_office(). Checks it runs twice cleanly and that
+// Runs supabase/cc_hub.sql on an in-memory Postgres with stand-ins for Supabase's roles and auth
+// schema. Checks it runs twice cleanly, that the first email-link sign-in claims the office, and that
 // only the office can change the few things the wall lets it change.
 const STUB = `
 create role anon; create role authenticated; create role service_role;
-create function public.is_office() returns boolean language sql stable as $$ select coalesce(current_setting('test.office', true), '') = 'yes' $$;
-grant execute on function public.is_office() to authenticated;
+create schema auth;
+create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('test.jwt', true), ''), '{}')::jsonb $$;
+grant usage on schema auth to authenticated;
 `
 const sql = readFileSync(new URL('../cc_hub.sql', import.meta.url), 'utf8')
 
@@ -20,7 +21,13 @@ async function setup() {
   await pg.exec(`insert into cc.news (id, title, source, tag, url, published_at) values ('n1', 'Peanut prices', 'USDA', 'MARKETS', 'https://x', now())`)
   return pg
 }
-const as = (pg: PGlite, office: boolean) => pg.exec(`reset role; select set_config('test.office', '${office ? 'yes' : 'no'}', false); set role authenticated;`)
+const signIn = (pg: PGlite, email: string, method: 'otp' | 'password') =>
+  pg.exec(`reset role; select set_config('test.jwt', '${JSON.stringify({ email, amr: [{ method }] })}', false); set role authenticated;`)
+const claim = async (pg: PGlite) => (await pg.query<{ c: boolean }>('select cc.claim_office() c')).rows[0].c
+const as = async (pg: PGlite, office: boolean) => {
+  await signIn(pg, 'office@farm.test', 'otp'); await claim(pg)
+  if (!office) await signIn(pg, 'wall@farm.test', 'password')
+}
 
 describe('cc hub schema', { timeout: 30000 }, () => {
   it('applies twice without error and seeds agents and feeds', async () => {
@@ -29,6 +36,25 @@ describe('cc hub schema', { timeout: 30000 }, () => {
     expect((await pg.query<{ n: number }>('select count(*)::int n from cc.agent')).rows[0].n).toBe(8)
     expect((await pg.query<{ n: number }>('select count(*)::int n from cc.feed')).rows[0].n).toBe(10)
     expect((await pg.query<{ n: number }>('select count(*)::int n from cc.control')).rows[0].n).toBe(1)
+  })
+
+  it('the first email-link sign-in claims the office; the wall password login never can', async () => {
+    const pg = await setup()
+    await signIn(pg, 'wall@farm.test', 'password')
+    expect(await claim(pg)).toBe(false)
+    await signIn(pg, 'Bo@Farm.test', 'otp')
+    expect(await claim(pg)).toBe(true)
+    await signIn(pg, 'someone@else.test', 'otp')
+    expect(await claim(pg)).toBe(false)
+    expect((await pg.query<{ o: boolean }>('select cc.is_office() o')).rows[0].o).toBe(false)
+  })
+
+  it('the Pivot Log copies are readable by any login and writable by none', async () => {
+    const pg = await setup()
+    await pg.exec(`insert into cc.pl_pivot (id, data, updated_at) values ('p1', '{"name":"Hodges 4"}', now())`)
+    await as(pg, true)
+    expect((await pg.query('select * from cc.pl_pivot')).rows).toHaveLength(1)
+    await expect(pg.exec(`insert into cc.pl_pivot (id, data, updated_at) values ('p2', '{}', now())`)).rejects.toThrow()
   })
 
   it('a feed with no good run in twice its schedule is overdue', async () => {
