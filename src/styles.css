@@ -31,7 +31,7 @@
   color-scheme:dark;
 }
 
-/* Palettes. Graphite is the default; ?theme=pine|porch|cream on the URL picks another (remembered). */
+/* Palettes. :root is graphite; main.tsx sets pine by default, and ?theme=graphite|pine|porch|cream picks another (remembered). */
 :root[data-theme="pine"]{
   --bg:#08100C; --panel:#101914; --panel-hi:#15201A; --raise:#1A261F; --raise-hi:#223027; --well:#0A120E;
   --ov:222,240,214; --line:rgba(222,240,214,.08); --line2:rgba(222,240,214,.14); --line-row:rgba(222,240,214,.055); --hl:rgba(235,250,228,.05);
