@@ -1,6 +1,7 @@
 {
   "_note": "Drive files the Google collector (collectors/google_feeds.py) reads. Ids are from the farm's Drive; change them here if a file moves.",
   "deere_csv": { "folder_id": "10hhKBWxcW9tLqm4Gj_GvLzENoHk7iAs6", "file_name": "field_operations.csv", "_where": "03_Ops Center/Field Operations (weekly Monday pull)" },
+  "deere_api": { "org_ids": ["3630"], "client_name": "JA Family Farms GP", "_where": "Ops Center org MINOR BROTHERS FARMS and the client the weekly pull uses (collectors/deere.py)" },
   "filer_logs": [
     { "feed": "nutrien-filer", "name": "Nutrien Log", "file_id": "1GOpKcbRD_-qw3jj7rTcof16W0__T4GLl7sR0irGSoSA" },
     { "feed": "perry-filer", "name": "Perry Brothers Log", "file_id": "1Vs9ck_UadzUpRKGTgbrzujxE2fntQJka5aidlrDLvJ8" }
