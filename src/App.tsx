@@ -73,8 +73,10 @@ export default function App() {
           </nav>
           <span className="grow" />
           {s.live ? <span className="badge live">LIVE · HUB</span> : <span className="badge sample" title={SAMPLE_NOTE}>SAMPLE DATA</span>}
-          <span className="clock">{now.toLocaleString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: TZ }).toUpperCase().replace(/,/g, '')}{'  '}
-            {now.toLocaleTimeString('en-US', { hour12: false, timeZone: TZ })} ET</span>
+          <span className="clock">
+            <span>{now.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: TZ })}</span>
+            <span className="time">{now.toLocaleTimeString('en-US', { hour12: false, timeZone: TZ })}</span><span className="tz">ET</span>
+          </span>
           <button className="btn small" onClick={() => (visitor ? (visitorPin ? setPinAsk(true) : setVisitor(false)) : setVisitor(true))}>{visitor ? 'Leave visitor mode' : 'Visitor mode'}</button>
           {office && <button className={`btn small${s.agentsPaused ? ' gold' : ' rust'}`} onClick={() => act(() => setAgentsPaused(!s.agentsPaused))}>{s.agentsPaused ? 'Resume agents' : 'Pause all agents'}</button>}
           {hubConfigured && !office && <button className="btn small" onClick={() => setSignIn(true)}>{needsSignIn ? 'Sign in' : 'Office sign-in'}</button>}
