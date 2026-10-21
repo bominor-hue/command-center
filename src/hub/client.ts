@@ -7,8 +7,17 @@ import type { Agent, Alert, Deadline, EntryRow, FarmForecast, FeedHealth, FieldR
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
-export const hubConfigured = !!(url && anon)
-export const supabase: SupabaseClient | null = hubConfigured ? createClient(url!, anon!, { auth: { persistSession: true } }) : null
+function validUrl(u: string) {
+  try { const x = new URL(u); return x.protocol === 'https:' && !/[<>\s]/.test(u) } catch { return false }
+}
+/** Why the hub settings can't be used (a placeholder or typo in the Netlify env), or null. The wall then runs on
+ *  sample data and says so, instead of failing to load at all. */
+export const hubSetupError: string | null = !url && !anon ? null
+  : !url || !anon ? `${!url ? 'VITE_SUPABASE_URL' : 'VITE_SUPABASE_ANON_KEY'} is not set`
+  : !validUrl(url.trim()) ? 'VITE_SUPABASE_URL should look like https://abcdefghijklmnop.supabase.co'
+  : null
+export const hubConfigured = !!(url && anon) && !hubSetupError
+export const supabase: SupabaseClient | null = hubConfigured ? createClient(url!.trim(), anon!.trim(), { auth: { persistSession: true } }) : null
 const cc = () => supabase!.schema('cc')
 
 async function rows<T>(q: PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {

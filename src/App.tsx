@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LAYOUTS, SEASONS, SEGMENTS, seasonFor, yearPercent, type PanelId } from './domain/season'
-import { cancelTask, dispatchTask, hideStory, hubConfigured, markHandled, setAgentsPaused, supabase } from './hub/client'
+import { cancelTask, dispatchTask, hideStory, hubConfigured, hubSetupError, markHandled, setAgentsPaused, supabase } from './hub/client'
 import { SAMPLE_NOTE } from './hub/sample'
 import type { FieldRow, Season } from './hub/types'
 import { useHub, useLocal, useNow } from './hub/useHub'
@@ -89,6 +89,7 @@ export default function App() {
         </div>
 
         {s.agentsPaused && <div className="banner paused">All agents are paused{office ? '. Resume agents in the header turns them back on.' : '.'}</div>}
+        {hubSetupError && <div className="banner stale">Hub settings need fixing in Netlify: {hubSetupError}. Showing sample data until then.</div>}
         {staleSince && <div className="banner stale">Hub not answering since {ago(staleSince, now)}: showing the last data. {s.error}</div>}
 
         <section className="season" aria-label="Time of year">
