@@ -37,7 +37,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - run: python3 collectors/google_feeds.py
+      - run: |
+          # Until the Google secrets are added (setup Part 3b), skip instead of failing every 15 minutes.
+          if [ -z "$GOOGLE_REFRESH_TOKEN" ]; then echo "::notice::Google feeds not set up yet (GOOGLE_* secrets missing); skipped."; exit 0; fi
+          python3 collectors/google_feeds.py
   nws:
     if: github.event.schedule == '7 * * * *' || inputs.job == 'all' || inputs.job == 'nws'
     runs-on: ubuntu-latest
