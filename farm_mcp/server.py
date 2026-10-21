@@ -1,7 +1,7 @@
 """The farm data MCP server: the hub's read tools, for Claude and the agents.
 
-Every answer comes from the hub (the `cc` schema, plus Pivot Log's tables for pivots), read with the
-service key, and every answer names where it came from. Read only: nothing here writes to the farm's
+Every answer comes from the hub (the `cc` schema in the farm hub's Supabase project, including its
+copy of Pivot Log's data in the pl_* tables), read with the service key, and every answer names where it came from. Read only: nothing here writes to the farm's
 systems. Each call is logged to cc.event (kind 'mcp_call') so the wall can show who asked what.
 
 Run:
@@ -91,8 +91,8 @@ def acres(farm: str | None = None, crop: str | None = None, water: str | None = 
 
 # Water ---------------------------------------------------------------------------------------------
 def docs(table):
-    """Pivot Log keeps its master lists as {id, data} documents."""
-    return [r["data"] for r in get(f"{table}?select=data", schema="public")]
+    """The hub's copy of a Pivot Log master list ({id, data} documents)."""
+    return [r["data"] for r in get(f"pl_{table}?select=data")]
 
 
 @mcp.tool()
@@ -128,9 +128,9 @@ def rain(days: int = 7, farm: str | None = None) -> dict:
     for rain ahead."""
     log("rain", {"days": days, "farm": farm})
     since = (dt.date.today() - dt.timedelta(days=max(1, min(days, 60)))).isoformat()
-    rain = [r["data"] for r in get(f"rain_day?select=data&data->>date=gte.{since}", schema="public")]
+    rain = [r["data"] for r in get(f"pl_rain_day?select=data&data->>date=gte.{since}")]
     return {"rain": rain_rows(rain, docs("pivot"), docs("farm"), farm),
-            "source": "NOAA MRMS radar via Pivot Log nightly rain (public.rain_day)"}
+            "source": "NOAA MRMS radar via Pivot Log nightly rain (copied to cc.pl_rain_day)"}
 
 
 @mcp.tool()

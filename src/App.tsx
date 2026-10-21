@@ -152,7 +152,7 @@ function PinSheet({ onOk, onClose }: { onOk: () => void; onClose: () => void }) 
   )
 }
 
-/** Same logins as Pivot Log: the office by email link; the wall's view-only login by email and password. */
+/** The hub's logins: the office by email link (the first one claims the office); the wall's view-only login by email and password. */
 function SignInSheet({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState(''), [password, setPassword] = useState('')
   const [msg, setMsg] = useState<string | null>(null), [err, setErr] = useState<string | null>(null)

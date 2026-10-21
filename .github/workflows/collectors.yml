@@ -2,8 +2,8 @@
 # running shows up on the wall's feed footer (and as an alert at twice its schedule).
 # Every job can also be run by hand from the Actions tab ("Run workflow").
 # Needs repository secrets (Settings > Secrets and variables > Actions):
-#   SUPABASE_PROJECT_REF   same as Pivot Log's
-#   SUPABASE_SERVICE_KEY   Supabase > Project Settings > API Keys > secret key
+#   SUPABASE_PROJECT_REF   the farm hub project (not Pivot Log's)
+#   SUPABASE_SERVICE_KEY   farm hub > Project Settings > API Keys > secret key
 #   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
 #                          an OAuth client with read-only Drive and Calendar scopes (see README)
 name: Collectors

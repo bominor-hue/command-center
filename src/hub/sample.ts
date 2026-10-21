@@ -51,7 +51,7 @@ export function sampleState(now = new Date()): HubState {
     brief: { writtenAt: at(1.7, now), text: 'Sample brief: pick the defoliated cotton before Thursday’s rain. Check Hodges 7, it is past its lap time. Deere data has not come in since Oct 3.', needsYou: [] },
     agents: [
       { id: 'brief', name: 'Brief', scope: 'Every hub table, weather, calendar', schedule: '6 AM and 6 PM', enabled: true, status: 'idle', nowDoing: 'Next brief at 6 PM' },
-      { id: 'water', name: 'Water', scope: 'Pivot Log, NOAA rain', schedule: 'Every 15 minutes', enabled: true, status: 'watching', nowDoing: 'Flagged Hodges 7, past its lap time' },
+      { id: 'water', name: 'Water', scope: 'Pivot Log (copied every 5 min), NOAA rain', schedule: 'Every 15 minutes', enabled: true, status: 'watching', nowDoing: 'Flagged Hodges 7, past its lap time' },
       { id: 'clerk', name: 'Filing clerk', scope: 'Gmail, Downloads, AI Data', schedule: 'Every 15 minutes', enabled: true, status: 'watching', nowDoing: 'Nutrien filer ran 6:00 AM' },
       { id: 'news', name: 'News', scope: 'USDA, UGA, NWS, farm press', schedule: 'Hourly', enabled: true, status: 'working', nowDoing: 'Picked 9 stories this morning' },
       { id: 'research', name: 'Research', scope: 'Web, the hub', schedule: 'On demand', enabled: true, status: 'working', nowDoing: 'Comparing 2027 peanut contract offers' },

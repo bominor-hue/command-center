@@ -1,6 +1,6 @@
 // Server side of the hub: a Supabase client with the service key (skips row security), for the
 // agents and the water rules. Never sent to a browser. Netlify environment: VITE_SUPABASE_URL,
-// VITE_SUPABASE_ANON_KEY, SUPABASE_SERVICE_KEY.
+// VITE_SUPABASE_ANON_KEY, SUPABASE_SERVICE_KEY (all three for the farm hub project, not Pivot Log's).
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 export function service(): SupabaseClient {
@@ -10,13 +10,13 @@ export function service(): SupabaseClient {
 }
 export const cc = (db: SupabaseClient) => db.schema('cc')
 
-/** True when the request carries a signed-in office login (Pivot Log's is_office()). */
+/** True when the request carries a signed-in office login (cc.is_office()). */
 export async function isOfficeCaller(req: Request): Promise<boolean> {
   const { VITE_SUPABASE_URL: url, VITE_SUPABASE_ANON_KEY: anon } = process.env
   const token = req.headers.get('authorization')?.replace(/^Bearer /, '')
   if (!url || !anon || !token) return false
   const asCaller = createClient(url, anon, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } })
-  const { data } = await asCaller.rpc('is_office')
+  const { data } = await asCaller.schema('cc').rpc('is_office')
   return data === true
 }
 

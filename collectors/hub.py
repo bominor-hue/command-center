@@ -1,7 +1,7 @@
 """The hub's REST API (Supabase PostgREST) for the collectors, with the service key.
 
 Same small client as Pivot Log's nightly jobs (bominor-hue/pivot-log jobs/nightly_rain.py), pointed at
-the `cc` schema. Every collector records its run in cc.feed_run so the wall's footer shows it.
+the farm hub project's `cc` schema. Every collector records its run in cc.feed_run so the wall's footer shows it.
 
 Needs SUPABASE_URL and SUPABASE_SERVICE_KEY in the environment.
 """

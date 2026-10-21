@@ -1,8 +1,8 @@
 // Water agent and feed watchdog, every 15 minutes (PRD alerts):
 //   red    Pivot still running: a run open past its lap time plus 2 h (Pivot Log entries)
 //   red    Feed or agent failed: no successful run in twice its schedule
-// It also records Pivot Log's and the nightly rain job's latest activity in the feed strip, since
-// those run in the Pivot Log repo and do not report here themselves.
+// Reads Pivot Log through the hub's copy (pl_* tables, refreshed every 5 min by pivot-sync). It also
+// records the nightly rain job's latest run in the feed strip, since that job runs in the Pivot Log repo.
 import type { Config } from '@netlify/functions'
 import { isStillRunning, runningPivots } from '../../src/domain/water'
 import type { EntryRow, PivotDoc } from '../../src/hub/types'
@@ -20,8 +20,8 @@ export default async function waterWatch() {
   try {
     const since = new Date(Date.now() - 21 * 86400000).toISOString()
     const [{ data: entries, error: e1 }, { data: pivots, error: e2 }] = await Promise.all([
-      db.from('entry').select(ENTRY_COLS).gte('happened_at', since),
-      db.from('pivot').select('data'),
+      cc(db).from('pl_entry').select(ENTRY_COLS).gte('happened_at', since),
+      cc(db).from('pl_pivot').select('data'),
     ])
     if (e1 || e2) throw new Error((e1 ?? e2)!.message)
     const running = runningPivots((entries ?? []) as EntryRow[], (pivots ?? []).map((p) => p.data as PivotDoc))
@@ -32,7 +32,7 @@ export default async function waterWatch() {
       why: r.dueAt
         ? `Turned on by ${r.who} and should have come around ${r.overdueHours!.toFixed(1)} h ago (lap time plus 2 h has passed).`
         : `Turned on by ${r.who} ${r.hours.toFixed(0)} h ago with no lap time on its profile and no OFF logged.`,
-      records: [{ source: 'Pivot Log', id: r.entryId }],
+      records: [{ source: 'Pivot Log', id: r.entryId, ...(process.env.VITE_PIVOT_LOG_URL ? { url: process.env.VITE_PIVOT_LOG_URL } : {}) }],
     })))
     const now = stuck.length ? `Flagged ${stuck.map((r) => r.name).join(', ')}` : `${running.length} pivot${running.length === 1 ? '' : 's'} running, none overdue`
     await cc(db).from('agent').update({ status: 'watching', now_doing: now, updated_at: new Date().toISOString() }).eq('id', 'water')
@@ -43,10 +43,8 @@ export default async function waterWatch() {
     })
     await feedRun(db, 'water-rules', { ok: true, rows: running.length, startedAt: started })
 
-    // Pivot Log and the nightly rain job: report their latest activity as feed runs.
-    const latestEntry = (entries ?? []).reduce<string | null>((a, e: any) => (!a || e.happened_at > a ? e.happened_at : a), null)
-    await reportExternal(db, 'pivot-log', latestEntry)
-    const { data: rain } = await db.from('rain_day').select('updated_at').eq('updated_by', 'nightly rain').order('updated_at', { ascending: false }).limit(1)
+    // The nightly rain job: report its latest run as a feed run.
+    const { data: rain } = await cc(db).from('pl_rain_day').select('updated_at').eq('updated_by', 'nightly rain').order('updated_at', { ascending: false }).limit(1)
     await reportExternal(db, 'noaa-rain', rain?.[0]?.updated_at ?? null)
 
     // Feeds that are overdue.
