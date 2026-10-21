@@ -95,7 +95,7 @@ export function FieldBoard({ s, d, compact, onPick }: { s: HubState; d: Derived;
         </div>
       </div>
       <div className="fb-foot">
-        <span>One row per field from <a href={FIELD_MASTER_URL} target="_blank" rel="noopener">{FIELD_MASTER_SOURCE}</a>. Status from the weekly Deere CSV, Pivot Log and the NWS forecast.</span>
+        <span>One row per field from <a href={FIELD_MASTER_URL} target="_blank" rel="noopener">{FIELD_MASTER_SOURCE}</a>. Status from Deere Ops Center, Pivot Log and the NWS forecast.</span>
         <span>Tap a row for its history and sources.</span>
       </div>
     </section>

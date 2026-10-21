@@ -6,12 +6,15 @@
 #   SUPABASE_SERVICE_KEY   farm hub > Project Settings > API Keys > secret key
 #   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
 #                          an OAuth client with read-only Drive and Calendar scopes (see README)
+#   DEERE_CLIENT_ID, DEERE_CLIENT_SECRET
+#                          the Deere developer app (README, Deere); the job skips itself until they exist
 name: Collectors
 on:
   schedule:
     - cron: '*/15 * * * *'  # Google: calendar, Deere CSV, filer logs
     - cron: '7 * * * *'     # hourly: NWS forecast, news
     - cron: '0 9 * * 1'     # Monday 4-5 am: Field Master (also on every change to the CSV)
+    - cron: '40 */2 * * *'  # every 2 hours: Deere Ops Center
   push:
     branches: [main]
     paths: [data/field_master_2026.csv]
@@ -20,7 +23,7 @@ on:
       job:
         description: 'Which collector'
         type: choice
-        options: [all, google, nws, news, field-master]
+        options: [all, google, nws, news, field-master, deere]
         default: all
 env:
   SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
@@ -62,3 +65,14 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python3 collectors/field_master.py
+  deere:
+    if: github.event.schedule == '40 */2 * * *' || inputs.job == 'all' || inputs.job == 'deere'
+    runs-on: ubuntu-latest
+    env:
+      DEERE_CLIENT_ID: ${{ secrets.DEERE_CLIENT_ID }}
+      DEERE_CLIENT_SECRET: ${{ secrets.DEERE_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python3 collectors/deere.py

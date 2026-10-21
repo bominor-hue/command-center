@@ -91,3 +91,27 @@ def test_mcp_rain_join():
                             [{"id": "p1", "farmId": "f1", "name": "Hodges 4"}, {"id": "p2", "farmId": "f2", "name": "Akin 1"}],
                             [{"id": "f1", "name": "Hodges Farm"}, {"id": "f2", "name": "Akin Farm"}], farm="akin")
     assert rows == [{"day": "2026-10-19", "farm": "Akin Farm", "pivot": "Akin 1", "inches": 1.1}]
+
+
+def test_deere_api_operation_rows():
+    import deere
+    op = {"id": "op7", "fieldOperationType": "application", "cropSeason": "2026", "cropName": "COTTON",
+          "startDate": "2026-09-28T13:00:00Z", "endDate": "2026-09-28T17:00:00Z", "modifiedTime": "2026-09-29T01:00:00Z",
+          "products": [{"name": "Defol mix", "components": [{"name": "Folex 6EC"}, {"name": "Dropp"}]}, {"name": "---"}]}
+    row = deere.op_row(op, 3630, {"id": "f1", "name": "A&B #5W"})
+    assert row["products"] == ["Folex 6EC", "Dropp"] and row["org_id"] == "3630" and row["end_at"] == "2026-09-28T17:00:00Z"
+    assert deere.products({"varieties": [{"name": "DP 2537 B3TXF"}]}) == ["DP 2537 B3TXF"]
+    # The Result area wins over a target, and hectares become acres.
+    meas = [{"measurementCategory": "Target", "area": {"value": 50, "unitId": "ac"}},
+            {"measurementCategory": "Result", "area": {"value": 20, "unitId": "ha"}}]
+    assert deere.area_acres(meas) == 49.42 and deere.area_acres([]) is None
+
+
+def test_deere_api_snapshots_share_the_csv_rules():
+    from google_feeds import ops_to_snaps
+    ops = {"op1": {"field": "Akin 2", "type": "harvest", "end": "2026-10-19", "acres": 40.0, "products": ["DP 2328 B3TXF"]},
+           "op2": {"field": "akin  2", "type": "harvest", "end": "2026-10-20", "acres": 15.5, "products": []}}
+    snaps, unmatched = ops_to_snaps(ops, FIELDS, 2026, "Deere Ops Center")
+    by = {s["metric"]: s for s in snaps}
+    assert by["last_operation"]["source_id"] == "op2" and by["last_operation"]["source"] == "Deere Ops Center"
+    assert by["harvested_acres"]["value"] == {"acres": 55.5} and unmatched == []

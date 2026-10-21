@@ -3,7 +3,8 @@
   Calendar   the next 60 days of events -> cc.event (kind 'calendar') for DEADLINES and the Brief
   Deere CSV  03_Ops Center/Field Operations/field_operations.csv (the Monday pull) -> per field, the
              latest operation and harvested acres -> cc.snapshot; names that match no Field Master
-             field go to cc.exception, never dropped
+             field go to cc.exception, never dropped. Skipped while collectors/deere.py (the Ops
+             Center API, every 2 hours) is current.
   Filers     the Nutrien and Perry Brothers logs' last change -> a feed run, so the strip shows them
 
 Read-only Google access with one OAuth refresh token for the farm's Google account (scopes
@@ -69,7 +70,6 @@ def deere_fields(text, fields, year):
 
     The CSV has one row per product per operation, so operations are de-duplicated by operation_id.
     Returns (snapshots, unmatched field names)."""
-    by_name = {norm(f["name"]): f for f in fields}
     ops = {}
     for r in csv.DictReader(io.StringIO(text.lstrip("﻿"))):
         if r.get("crop_season") and r["crop_season"] != str(year):
@@ -80,6 +80,13 @@ def deere_fields(text, fields, year):
         p = (r.get("product_name") or r.get("tank_mix_name") or "").strip()
         if p and p not in op["products"]:
             op["products"].append(p)
+    return ops_to_snaps(ops, fields, year, "Deere CSV")
+
+
+def ops_to_snaps(ops, fields, year, source):
+    """{operation id: {field, type, end, acres, products}} -> the last operation and harvested acres per
+    Field Master field. Shared by the weekly CSV and the Ops Center API collector (collectors/deere.py)."""
+    by_name = {norm(f["name"]): f for f in fields}
     last, harvested, unmatched = {}, {}, set()
     for oid, op in ops.items():
         f = by_name.get(norm(op["field"]))
@@ -92,16 +99,26 @@ def deere_fields(text, fields, year):
             harvested[f["id"]] = harvested.get(f["id"], 0) + op["acres"]
     snaps = []
     for fid, (oid, op) in last.items():
-        snaps.append({"key": f"field:{fid}", "metric": "last_operation", "source": "Deere CSV", "source_id": oid,
+        snaps.append({"key": f"field:{fid}", "metric": "last_operation", "source": source, "source_id": oid,
                       "source_url": "https://operationscenter.deere.com", "as_of": op["end"],
                       "value": {"type": op["type"], "date": op["end"], "product": ", ".join(op["products"][:2]) or None, "acres": op["acres"]}})
     for fid, acres in harvested.items():
-        snaps.append({"key": f"field:{fid}", "metric": "harvested_acres", "source": "Deere CSV", "source_id": f"harvest ops {year}",
+        snaps.append({"key": f"field:{fid}", "metric": "harvested_acres", "source": source, "source_id": f"harvest ops {year}",
                       "source_url": "https://operationscenter.deere.com", "as_of": last[fid][1]["end"], "value": {"acres": round(acres, 1)}})
     return snaps, sorted(unmatched)
 
 
+def api_feed_current(hub):
+    """True while the Ops Center API collector has succeeded in the last day; then the older weekly CSV
+    must not overwrite its snapshots."""
+    since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).isoformat()
+    return bool(hub.call("GET", "feed_run?select=id&feed_id=eq.deere&ok=eq.true&finished_at=gte." + urllib.parse.quote(since) + "&limit=1"))
+
+
 def deere(g, hub, year):
+    if api_feed_current(hub):
+        print("Deere CSV: skipped, the Ops Center API feed is current")
+        return 0
     c = CFG["deere_csv"]
     q = urllib.parse.urlencode({"q": f"'{c['folder_id']}' in parents and name = '{c['file_name']}' and trashed = false",
                                 "fields": "files(id,modifiedTime)", "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"})

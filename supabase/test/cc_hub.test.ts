@@ -34,7 +34,7 @@ describe('cc hub schema', { timeout: 30000 }, () => {
     const pg = await setup()
     await pg.exec(sql)
     expect((await pg.query<{ n: number }>('select count(*)::int n from cc.agent')).rows[0].n).toBe(8)
-    expect((await pg.query<{ n: number }>('select count(*)::int n from cc.feed')).rows[0].n).toBe(10)
+    expect((await pg.query<{ n: number }>('select count(*)::int n from cc.feed')).rows[0].n).toBe(11)
     expect((await pg.query<{ n: number }>('select count(*)::int n from cc.control')).rows[0].n).toBe(1)
   })
 
@@ -55,6 +55,15 @@ describe('cc hub schema', { timeout: 30000 }, () => {
     await as(pg, true)
     expect((await pg.query('select * from cc.pl_pivot')).rows).toHaveLength(1)
     await expect(pg.exec(`insert into cc.pl_pivot (id, data, updated_at) values ('p2', '{}', now())`)).rejects.toThrow()
+  })
+
+  it('the Deere sign-in is hidden from every login, the office included', async () => {
+    const pg = await setup()
+    await pg.exec(`insert into cc.deere_token (refresh_token) values ('secret')`)
+    await as(pg, true)
+    await expect(pg.query('select refresh_token from cc.deere_token')).rejects.toThrow()
+    await signIn(pg, 'wall@farm.test', 'password')
+    await expect(pg.query('select refresh_token from cc.deere_token')).rejects.toThrow()
   })
 
   it('a feed with no good run in twice its schedule is overdue', async () => {

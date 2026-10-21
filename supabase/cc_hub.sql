@@ -239,6 +239,38 @@ create table if not exists cc.news (
 );
 create index if not exists news_recent on cc.news (published_at desc);
 
+-- Deere Ops Center, pulled by collectors/deere.py every 2 hours. deere_op keeps each field operation
+-- as Deere sent it, so an unchanged operation is not fetched again (Deere counts every API call).
+create table if not exists cc.deere_op (
+  id text primary key,                 -- Deere's field operation id
+  org_id text not null,
+  field_id text not null,              -- Deere's field id
+  field_name text not null,
+  operation_type text not null,        -- seeding, application, harvest, tillage
+  crop_season text,
+  crop_name text,
+  start_at timestamptz,
+  end_at timestamptz,
+  area_acres numeric,                  -- area worked, from the operation's measurements
+  products text[] not null default '{}', -- products, tank mixes or varieties
+  modified_at text,                    -- Deere's modifiedTime; a change refetches the measurements
+  updated_at timestamptz not null default now()
+);
+create index if not exists deere_op_field on cc.deere_op (field_name, end_at desc);
+
+-- The Deere sign-in (one row). Written by netlify/functions/deere-auth.mts when the office signs in
+-- to Deere, and by the collector whenever Deere hands back a new refresh token. Service key only: no
+-- login can read it.
+create table if not exists cc.deere_token (
+  id int primary key default 1 check (id = 1),
+  refresh_token text not null,
+  signed_in_as text,
+  updated_at timestamptz not null default now()
+);
+alter table cc.deere_token enable row level security;
+revoke all on cc.deere_token from anon, authenticated;
+grant all on cc.deere_token to service_role;
+
 -- Latest successful and latest run per feed, for the footer strip.
 create or replace view cc.feed_health with (security_invoker = true) as
 select f.id, f.name, f.every_minutes, f.sort,
@@ -255,7 +287,7 @@ insert into cc.agent (id, name, scope, schedule, enabled, status, now_doing, sor
   ('clerk', 'Filing clerk', 'Gmail, Downloads, AI Data (the existing filers)', 'Every 15 minutes', true, 'watching', null, 3),
   ('news', 'News', 'USDA, UGA, NWS, farm press', 'Hourly', true, 'watching', null, 4),
   ('research', 'Research', 'Web, the hub', 'On demand', true, 'idle', 'Ready for a task', 5),
-  ('field', 'Field ops', 'Deere Ops Center', 'Every 15 minutes in season', false, 'off', 'Waits on the Deere connector', 6),
+  ('field', 'Field ops', 'Deere Ops Center', 'Every 2 hours', false, 'off', 'Waits on the Deere sign-in', 6),
   ('books', 'Books', 'QuickBooks, Nutrien, Perry Bros.', 'Daily', false, 'off', 'Comes with the approval queue (v2)', 7),
   ('markets', 'Markets', 'Prices, marketing sheet', 'Market hours', false, 'off', 'Comes with the price feed (v3)', 8)
 on conflict (id) do update set name = excluded.name, scope = excluded.scope, schedule = excluded.schedule, sort = excluded.sort;
@@ -270,12 +302,13 @@ insert into cc.feed (id, name, every_minutes, sort) values
   ('perry-filer', 'PERRY BROS', 10080, 7),
   ('calendar', 'CALENDAR', 15, 8),
   ('news', 'NEWS', 60, 9),
-  ('water-rules', 'WATER AGENT', 15, 10)
+  ('water-rules', 'WATER AGENT', 15, 10),
+  ('deere', 'DEERE', 120, 5)
 on conflict (id) do update set name = excluded.name, every_minutes = excluded.every_minutes, sort = excluded.sort;
 
 -- Row security ---------------------------------------------------------------------------------------------
 do $$ declare t text; begin
-  foreach t in array array['field','snapshot','event','alert','brief','agent','task','agent_run','approval','control','feed','feed_run','exception','news','office_user','pl_farm','pl_pivot','pl_field','pl_rain_day','pl_entry'] loop
+  foreach t in array array['field','snapshot','event','alert','brief','agent','task','agent_run','approval','control','feed','feed_run','exception','news','office_user','pl_farm','pl_pivot','pl_field','pl_rain_day','pl_entry','deere_op'] loop
     execute format('alter table cc.%I enable row level security', t);
     execute format('drop policy if exists %I on cc.%I', t || '_read', t);
     execute format('create policy %I on cc.%I for select to authenticated using (true)', t || '_read', t);

@@ -16,7 +16,7 @@ data MCP server. Harvest by crew, the fleet panel, and the crew panel wait on an
 | Pivot sync | `netlify/functions/pivot-sync.mts` | Every 5 min: copies farms, pivots, pivot fields, new on/off entries and radar rain from Pivot Log, signed in there as a read-only viewer. Pivot Log stays its own project and is never written to. |
 | Water watch | `netlify/functions/water-watch.mts` | Every 15 min: red alert when a pivot runs past its lap time + 2 h (36 h with no lap time), red alert when a feed misses two runs. Same rules as Pivot Log. |
 | Agents | `netlify/functions/agent-*.mts`, `netlify/lib/agents.ts` | Brief (6 am and 6 pm, and on demand) and Research (web search plus the hub). Pause all agents stops them within seconds. |
-| Collectors | `collectors/*.py`, `.github/workflows/collectors.yml` | Field Master (weekly), NWS forecast by farm (hourly), news (hourly), Google Calendar, the weekly Deere CSV, and the Nutrien and Perry Brothers filer logs (every 15 min). |
+| Collectors | `collectors/*.py`, `.github/workflows/collectors.yml` | Field Master (weekly), NWS forecast by farm (hourly), news (hourly), Google Calendar, the weekly Deere CSV, and the Nutrien and Perry Brothers filer logs (every 15 min). Deere Ops Center straight from the API (every 2 hours, `collectors/deere.py`); while it is current the weekly CSV is skipped. |
 | Farm MCP | `farm_mcp/server.py` | Read-only tools for Claude: `field_status`, `acres`, `pivots_running`, `rain`, `forecast`, `alerts`, `brief`, `why`, `feeds`. Each answer names its source. |
 
 ## Setup
@@ -45,7 +45,14 @@ The step-by-step version, with where to click, is the "Command center setup step
 8. **Kiosk.** On the wall PC, open the site full screen (Chrome `--kiosk`), sign in once with the wall
    login, and leave it. It reloads data live and every 2 minutes, and shows a STALE banner if it loses
    the hub.
-9. **MCP server.** `pip install -r farm_mcp/requirements.txt`, then run `farm_mcp/server.py` with
+9. **Deere.** At developer.deere.com, on the app the Deere connector uses (production access), add the
+   redirect URI `https://<site>/.netlify/functions/deere-auth`. Put the app's ID and secret in two places:
+   repository secrets `DEERE_CLIENT_ID` and `DEERE_CLIENT_SECRET`, and the same two names in Netlify.
+   Then open `https://<site>/.netlify/functions/deere-auth?key=<HEARTBEAT_KEY>` and sign in with your
+   John Deere ID. The page lists your orgs and links any that still have to approve the app. The
+   refresh token goes into `cc.deere_token`, which no login can read, and never shows on screen. If
+   the DEERE light on the feed strip goes red with "sign-in expired", open the link again.
+10. **MCP server.** `pip install -r farm_mcp/requirements.txt`, then run `farm_mcp/server.py` with
    `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (farm hub) and `MCP_TOKEN` set, wherever the Deere connector
    runs. Add it to Claude as a custom connector at `https://<host>/mcp` with the token as a bearer header.
 
@@ -63,8 +70,8 @@ python3 collectors/nws.py --dry-run
 
 - **Which gin** gets the cotton, and how its tickets arrive. Needed for harvest by crop and modules.
 - **Crew hours**: which timekeeping or payroll system. The crew panel shows no pay or SSNs either way.
-- **Deere connector** has been down since Oct 3 and needs a reconnect with production access. Until
-  then field operations come from the weekly CSV, so the field board can be up to a week behind.
+- **Deere Harvest ID** module counts (cotton modules by field) are not pulled yet; the Deere feed covers
+  field operations. Operations deleted in Ops Center stay in `cc.deere_op` until removed by hand.
 - **Entity codes** (JAMFF, MBFP, …) are not mapped to FSA producers yet; producers show as written.
 - The news source URLs in `data/news_sources.json` have not been checked against the live feeds.
 
