@@ -84,7 +84,8 @@ export default function App() {
 
         <div className="ticker" aria-label="Market ticker">
           <span className="k">MKTS</span>
-          <span>Cotton, corn, soybean and peanut quotes, diesel and basis join this strip with the price feed (v3).</span>
+          <div className="run">{[0, 1].map((k) => (
+            <span key={k} aria-hidden={k === 1 || undefined}>Cotton, corn, soybean and peanut quotes, diesel and basis join this strip with the price feed (v3).</span>))}</div>
         </div>
 
         {s.agentsPaused && <div className="banner paused">All agents are paused{office ? '. Resume agents in the header turns them back on.' : '.'}</div>}
