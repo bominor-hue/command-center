@@ -184,8 +184,8 @@ export function Water({ s, d, lead }: { s: HubState; d: Derived; lead?: boolean 
           {lines.map((r) => (
             <div key={r.pivotId} className="line">
               <b>{r.name}</b>
-              <span>ON {r.hours.toFixed(1)} H</span>
-              {isStillRunning(r) ? <span className="red">CHECK</span> : r.dueAt ? <span>AROUND {clock(r.dueAt)}</span> : <span className="muted">NO LAP TIME</span>}
+              <span>{r.hours.toFixed(1)} H</span>
+              {isStillRunning(r) ? <span className="red">CHECK</span> : r.dueAt ? <span>LAP {clock(r.dueAt)}</span> : <span className="muted">NO LAP TIME</span>}
             </div>))}
           {!d.running.length && <div className="line"><span>No pivots running</span></div>}
           <div className="line"><span>RAIN {latestRain ? shortDay(latestRain + 'T12:00:00Z').toUpperCase() : '24H'} · MAX ANY PIVOT</span><b>{latestRain ? `${maxRain.toFixed(2)} IN` : '—'}</b></div>

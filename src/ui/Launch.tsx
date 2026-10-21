@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLocal } from '../hub/useHub'
 import { Panel } from './common'
+import { BRANDS } from './brandIcons'
 
 // LAUNCH: icon tiles for every farm site, opening in a new tab. Kept on this screen (not in the hub)
 // so the tiles work even when the hub is down. Edit adds, removes and moves tiles.
@@ -49,6 +50,27 @@ const Icon = ({ name }: { name: IconName }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{ __html: P[name] ?? P.link }} />
 )
 
+/** The tile's app icon: the site's real mark. Bundled brand glyphs first (they work offline), then the
+ *  site's own favicon, then the line icon if neither is there. */
+function AppIcon({ t }: { t: Tile }) {
+  const [failed, setFailed] = useState(false)
+  let host = ''
+  try { host = t.url ? new URL(t.url).hostname : '' } catch { /* not a URL */ }
+  const brand = BRANDS[host]
+  if (brand) return (
+    <span className="appicon" style={{ background: brand.bg }}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d={brand.d} fill={brand.fg} /></svg>
+    </span>
+  )
+  if (host && !failed) return (
+    <span className="appicon fav">
+      <img src={`https://www.google.com/s2/favicons?domain=${host}&sz=64`} alt="" onError={() => setFailed(true)}
+        onLoad={(e) => { if (e.currentTarget.naturalWidth <= 16) setFailed(true) }} />
+    </span>
+  )
+  return <span className="appicon line"><Icon name={t.icon} /></span>
+}
+
 export function Launch({ canEdit }: { canEdit: boolean }) {
   const [tiles, setTiles] = useLocal<Tile[]>('launch', DEFAULT_TILES)
   const [editing, setEditing] = useState(false)
@@ -64,13 +86,13 @@ export function Launch({ canEdit }: { canEdit: boolean }) {
       <div className="tiles">
         {tiles.map((t, i) => editing ? (
           <div key={t.name + i} className="tile">
-            <button onClick={() => move(i)} aria-label={`Move ${t.name} left`} style={{ display: 'contents' }}><Icon name={t.icon} />{t.name}</button>
+            <button onClick={() => move(i)} aria-label={`Move ${t.name} left`} style={{ display: 'contents' }}><AppIcon t={t} /><span className="tn">{t.name}</span></button>
             <button className="x" aria-label={`Remove ${t.name}`} onClick={() => setTiles(tiles.filter((_, j) => j !== i))}>×</button>
           </div>
         ) : t.url ? (
-          <a key={t.name + i} className="tile" href={t.url} target="_blank" rel="noopener"><Icon name={t.icon} />{t.name}</a>
+          <a key={t.name + i} className="tile" href={t.url} target="_blank" rel="noopener"><AppIcon t={t} /><span className="tn">{t.name}</span></a>
         ) : (
-          <span key={t.name + i} className="tile todo" title="Needs its sign-in link: Edit, remove it and add it back with the link"><Icon name={t.icon} />{t.name}</span>
+          <span key={t.name + i} className="tile todo" title="Needs its sign-in link: Edit, remove it and add it back with the link"><AppIcon t={t} /><span className="tn">{t.name}</span></span>
         ))}
       </div>
       {editing && (
