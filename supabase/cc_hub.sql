@@ -303,7 +303,8 @@ insert into cc.feed (id, name, every_minutes, sort) values
   ('calendar', 'CALENDAR', 15, 8),
   ('news', 'NEWS', 60, 9),
   ('water-rules', 'WATER AGENT', 15, 10),
-  ('deere', 'DEERE', 120, 5)
+  ('deere', 'DEERE', 120, 5),
+  ('harvest-workbooks', 'HARVEST BOOKS', 60, 11)  -- checked every 30 min
 on conflict (id) do update set name = excluded.name, every_minutes = excluded.every_minutes, sort = excluded.sort;
 
 -- Row security ---------------------------------------------------------------------------------------------
