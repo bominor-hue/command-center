@@ -115,3 +115,28 @@ def test_deere_api_snapshots_share_the_csv_rules():
     by = {s["metric"]: s for s in snaps}
     assert by["last_operation"]["source_id"] == "op2" and by["last_operation"]["source"] == "Deere Ops Center"
     assert by["harvested_acres"]["value"] == {"acres": 55.5} and unmatched == []
+
+
+def test_snapshots_carry_planting_and_spray_passes():
+    from google_feeds import farm_day, ops_to_snaps
+    assert farm_day("2026-06-06T01:00:00Z") == "2026-06-05" and farm_day("2026-06-05") == "2026-06-05"
+    ops = {"s1": {"field": "Akin 2", "type": "seeding", "end": "2026-04-24T20:00:00Z", "acres": 40.0, "products": ["TifNV-HG"]},
+           "s0": {"field": "Akin 2", "type": "seeding", "end": "2026-04-23T20:00:00Z", "acres": 20.0, "products": ["GA-06G"]},
+           "a2": {"field": "Akin 2", "type": "application", "end": "2026-06-22T15:00:00Z", "acres": 60.0, "products": ["Provost Silver"]},
+           "a1": {"field": "Akin 2", "type": "application", "end": "2026-06-08T15:00:00Z", "acres": 60.0, "products": ["28-0-0-5"],
+                  "rates": [{"product": "28-0-0-5", "rate": 10.0, "unit": "gal1ac-1"}]}}
+    snaps, _ = ops_to_snaps(ops, FIELDS, 2026, "Deere Ops Center")
+    by = {s["metric"]: s for s in snaps}
+    assert by["planted"]["value"] == {"date": "2026-04-23", "variety": "GA-06G"} and by["planted"]["source_id"] == "s0"
+    passes = by["applications"]["value"]["passes"]
+    assert [p["id"] for p in passes] == ["a1", "a2"] and passes[0]["rates"][0]["unit"] == "gal1ac-1" and "rates" not in passes[1]
+    assert by["applications"]["as_of"] == "2026-06-22" and by["last_operation"]["value"]["date"] == "2026-06-22"
+
+
+def test_deere_api_application_rates():
+    import deere
+    meas = [{"measurementName": "ApplicationRateResult", "measurementCategory": "Result",
+             "productTotals": [{"name": "28-0-0-5", "averageMaterial": {"value": 10.04, "unitId": "gal1ac-1"}},
+                               {"name": "Water", "averageMaterial": {"value": None, "unitId": "gal1ac-1"}}]},
+            {"measurementName": "AreaResult", "area": {"value": 20, "unitId": "ac"}}]
+    assert deere.rates(meas) == [{"product": "28-0-0-5", "rate": 10.04, "unit": "gal1ac-1"}] and deere.rates([]) == []

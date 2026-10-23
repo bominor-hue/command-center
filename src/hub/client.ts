@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { FIELD_MASTER, FIELD_MASTER_SOURCE } from './fieldMaster'
-import type { Agent, Alert, Deadline, EntryRow, FarmForecast, FeedHealth, FieldRow, HubState, LastOperation, NewsItem, Task } from './types'
+import type { Agent, Alert, Application, Deadline, EntryRow, FarmForecast, FeedHealth, FieldRow, HubState, LastOperation, NewsItem, Planting, Task } from './types'
 
 // The hub is the `cc` schema in the farm hub's own Supabase project (supabase/cc_hub.sql). Pivot Log's
 // data arrives there as the pl_* copies. The wall only reads, plus the few office actions row security allows.
@@ -35,9 +35,10 @@ export async function loadHub(now = new Date()): Promise<HubState> {
   const since21 = new Date(now.getTime() - 21 * 86400000).toISOString()
   const since2 = new Date(now.getTime() - 2 * 86400000).toISOString().slice(0, 10)
 
-  const [fieldRows, snaps, alerts, briefs, agents, tasks, approvals, feeds, news, control, cal, pivots, pivotFields, farms, entries, rain, office] = await Promise.all([
+  const [fieldRows, snaps, wallApps, alerts, briefs, agents, tasks, approvals, feeds, news, control, cal, pivots, pivotFields, farms, entries, rain, office] = await Promise.all([
     rows<any>(cc().from('field').select('*').eq('crop_year', now.getFullYear())),
-    rows<any>(cc().from('snapshot').select('key,metric,value,source,source_id,source_url,as_of').in('metric', ['forecast', 'last_operation', 'harvested_acres'])),
+    rows<any>(cc().from('snapshot').select('key,metric,value,source,source_id,source_url,as_of').in('metric', ['forecast', 'last_operation', 'harvested_acres', 'planted', 'applications'])),
+    rows<any>(cc().from('application').select('*').gte('applied_on', `${now.getFullYear()}-01-01`)),
     rows<any>(cc().from('alert').select('*').is('cleared_at', null).is('handled_at', null).order('opened_at', { ascending: false })),
     rows<any>(cc().from('brief').select('*').order('written_at', { ascending: false }).limit(1)),
     rows<any>(cc().from('agent').select('*').order('sort')),
@@ -63,16 +64,26 @@ export async function loadHub(now = new Date()): Promise<HubState> {
   const lastOps: Record<string, LastOperation> = {}
   const harvested: HubState['harvested'] = {}
   const forecasts: FarmForecast[] = []
+  const plantings: Record<string, Planting> = {}
+  const applications: Record<string, Application[]> = {}
+  const addApp = (id: string, a: Application) => (applications[id] ??= []).push(a)
   for (const s of snaps) {
     const id = s.key.replace(/^field:/, '')
     if (s.metric === 'last_operation') lastOps[id] = { ...s.value, source: src(s) }
+    else if (s.metric === 'planted') plantings[id] = { date: s.value.date, variety: s.value.variety ?? null, source: src(s) }
+    else if (s.metric === 'applications') for (const a of s.value.passes ?? []) addApp(id, { date: a.date, products: a.products ?? [], acres: a.acres ?? null, rates: a.rates, source: { source: s.source, id: a.id, url: s.source_url } })
     else if (s.metric === 'harvested_acres') harvested[id] = { acres: Number(s.value.acres) || 0, asOf: s.as_of, source: src(s) }
     else if (s.metric === 'forecast') forecasts.push({ farm: s.key.replace(/^farm:/, ''), days: s.value.days, sprayWindow: s.value.sprayWindow ?? null, asOf: s.as_of, source: src(s) })
   }
+  for (const a of wallApps) addApp(a.field_id, {
+    date: a.applied_on, products: a.products, acres: a.acres == null ? null : Number(a.acres), rates: a.rates ?? [],
+    source: { source: a.source === 'Wall' ? `Entered on the wall${a.entered_by ? ` by ${a.entered_by}` : ''}` : a.source, id: String(a.id), url: a.source_url },
+    wallId: a.source === 'Wall' ? a.id : undefined,
+  })
   const b = briefs[0]
   return {
     live: true, loadedAt: now.toISOString(), error: null,
-    fields, lastOps, harvested, forecasts,
+    fields, lastOps, harvested, forecasts, plantings, applications,
     pivots: pivots.map((r) => r.data), pivotFields: pivotFields.map((r) => r.data), farms: farms.map((r) => r.data),
     entries, rain: rain.map((r) => r.data),
     alerts: alerts.filter((a) => !a.snoozed_until || Date.parse(a.snoozed_until) < now.getTime())
@@ -93,7 +104,7 @@ export async function loadHub(now = new Date()): Promise<HubState> {
 export function watchHub(onChange: () => void): () => void {
   if (!supabase) return () => {}
   const ch = supabase.channel('wall')
-  for (const table of ['alert', 'brief', 'agent', 'task', 'control', 'feed_run', 'news', 'snapshot']) {
+  for (const table of ['alert', 'brief', 'agent', 'task', 'control', 'feed_run', 'news', 'snapshot', 'application']) {
     ch.on('postgres_changes', { event: '*', schema: 'cc', table }, onChange)
   }
   ch.on('postgres_changes', { event: 'INSERT', schema: 'cc', table: 'pl_entry' }, onChange)
@@ -132,6 +143,17 @@ export async function hideStory(id: string) {
 export async function setAgentsPaused(paused: boolean) {
   const { data: s } = await supabase!.auth.getSession()
   const { error } = await cc().from('control').update({ agents_paused: paused, paused_at: paused ? new Date().toISOString() : null, paused_by: paused ? s.session?.user.email ?? 'office' : null }).eq('id', 1)
+  if (error) throw new Error(error.message)
+}
+
+/** Record a spray or fertilizer pass Deere doesn't have (an airplane, a custom applicator). */
+export async function recordApplication(a: { fieldId: string; date: string; products: string[]; acres: number | null; applicator: string | null; note: string | null }) {
+  const { error } = await cc().from('application').insert({ field_id: a.fieldId, applied_on: a.date, products: a.products, acres: a.acres, applicator: a.applicator, note: a.note })
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteApplication(id: number) {
+  const { error } = await cc().from('application').delete().eq('id', id)
   if (error) throw new Error(error.message)
 }
 

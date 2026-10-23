@@ -1,0 +1,28 @@
+{
+  "_about": "Growing-season spray and fertilizer programs for the wall's SPRAYS board and FERT panel (src/domain/sprays.ts). Products: what each name on a Deere application counts as; a name matches by its start, so 'Pix 6x' is Pix and 'Warrant~6' is Warrant. Programs: one tab each on the board. passes = target timings in days after planting (DAP); an empty list means the timing is not set yet, and the board shows passes done and days since the last one. Timings are Bo's only: the peanut program is his 2026 Peanut Spray Schedule sheet (Drive, Spray Plans).",
+  "products": {
+    "herbicide": ["Reflex", "Warrant", "Dual", "Roundup", "Liberty", "Mad Dog", "Clash", "Forfet", "Forfeit", "Dicamba", "Xtendimax", "Clethodim", "Gramoxone", "Valor", "Prowl", "Atrazine", "Mesotrione", "Direx", "Cotoran", "Staple", "Envoke", "Cadre", "Strongarm", "2,4-DB", "Butyrac", "Basagran", "Select", "Enlist", "Engenia", "Sharpen", "Halex", "Acuron", "Callisto", "Zidua", "Brake"],
+    "fungicide": ["Bravo", "Tebuconazole", "Tebu", "Elatus", "Miravis", "Provost", "Excalia", "Lucento", "Fontelis", "Priaxor", "Abound", "Umbra", "Alto", "Convoy", "Headline", "Quadris", "Topguard", "Muscle", "Echo", "Equus", "Velum", "Trivapro", "Delaro", "Veltyma", "Revytek"],
+    "insecticide": ["Bidrin", "Acephate", "Orthene", "Transform", "Besiege", "Vantacor", "Prevathon", "Bifenthrin", "Brigade", "Karate", "Warrior", "Lambda", "Intrepid", "Diamond", "Admire", "Imidacloprid", "Sivanto", "Carbine", "Exirel", "Radiant", "Dimilin"],
+    "pgr": ["Pix", "MepStar", "Mepiquat", "Mepex", "Stance", "Pentia"],
+    "fertilizer": ["28-0-0", "24-0-0", "32-0-0", "19-11-0", "10-34-0", "11-52-0", "0-0-60", "MAP", "Potash", "Urea", "UAN", "AMS", "Full-bor", "Boron", "Zinc", "Gypsum", "Landplaster", "Lime"],
+    "adjuvant": ["Choice Trio", "Strut", "Flame", "Grounded", "Unfoamer", "Induce", "Crop oil", "COC", "MSO", "NIS"]
+  },
+  "nitrogen": {
+    "_about": "Percent N by weight and pounds per gallon, to turn a Deere rate into lb N per acre. Only products whose density is on the label go here.",
+    "28-0-0": { "n_pct": 28, "lb_per_gal": 10.66 },
+    "32-0-0": { "n_pct": 32, "lb_per_gal": 11.06 }
+  },
+  "programs": [
+    { "id": "peanut-fungicide", "code": "PEANUT FUNGICIDE", "crop": "Peanuts", "kinds": ["fungicide"],
+      "passes": [45, 60, 75, 90, 105, 120, 135], "source": "Peanut Spray Schedule 2026 (Bo)" },
+    { "id": "cotton-herbicide", "code": "COTTON HERBICIDE", "crop": "Cotton", "kinds": ["herbicide"], "passes": [] },
+    { "id": "cotton-pgr", "code": "COTTON PIX", "crop": "Cotton", "kinds": ["pgr"], "passes": [] },
+    { "id": "cotton-insecticide", "code": "COTTON INSECT", "crop": "Cotton", "kinds": ["insecticide"], "passes": [] },
+    { "id": "corn-spray", "code": "CORN", "crop": "Corn", "kinds": ["herbicide", "fungicide", "insecticide"], "passes": [] }
+  ],
+  "fertilizer": {
+    "_about": "Target lb N per acre for the season by crop; null until Bo sets it, and the panel then shows N applied without a target.",
+    "n_target_lb_ac": { "Corn": null, "Cotton": null, "Peanuts": null }
+  }
+}
