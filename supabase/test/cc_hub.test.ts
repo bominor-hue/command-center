@@ -101,4 +101,27 @@ describe('cc hub schema', { timeout: 30000 }, () => {
     expect((await pg.query(`select * from cc.alert where handled_at is not null`)).rows).toHaveLength(1)
     expect((await pg.query(`select * from cc.control where agents_paused`)).rows).toHaveLength(1)
   })
+
+  it('only the office records a pass on the wall, signed with its email, and takes back only its own', async () => {
+    const pg = await setup()
+    await pg.exec(`insert into cc.application (field_id, applied_on, products, source) values ('2026|Akin #3', '2026-06-08', '{Elatus}', 'Nutrien Echelon')`)
+    await as(pg, false)
+    await expect(pg.exec(`insert into cc.application (field_id, applied_on, products) values ('2026|Akin #3', '2026-06-22', '{Provost Silver}')`)).rejects.toThrow()
+    await as(pg, true)
+    await pg.exec(`insert into cc.application (field_id, applied_on, products, acres, applicator) values ('2026|Akin #3', '2026-06-22', '{Provost Silver}', 60, 'Air Ag')`)
+    await expect(pg.exec(`insert into cc.application (field_id, applied_on, products, source) values ('2026|Akin #3', '2026-06-22', '{x}', 'Deere')`)).rejects.toThrow()
+    await expect(pg.exec(`insert into cc.application (field_id, applied_on, products) values ('2026|Akin #3', '2026-06-22', '{}')`)).rejects.toThrow()
+    await pg.exec(`delete from cc.application`) // row security: only the wall's own rows
+    await pg.exec('reset role')
+    const left = (await pg.query<{ source: string }>(`select source from cc.application`)).rows
+    expect(left).toEqual([{ source: 'Nutrien Echelon' }])
+  })
+
+  it('a wall entry keeps the email it was entered with', async () => {
+    const pg = await setup()
+    await as(pg, true)
+    await pg.exec(`insert into cc.application (field_id, applied_on, products) values ('2026|Akin #3', '2026-06-22', '{Provost Silver}')`)
+    await pg.exec('reset role')
+    expect((await pg.query<{ e: string }>(`select entered_by e from cc.application`)).rows[0].e).toBe('office@farm.test')
+  })
 })

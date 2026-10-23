@@ -19,6 +19,9 @@ Usage:
 import argparse, csv, datetime as dt, io, json, os, re, sys, urllib.parse, urllib.request
 sys.path.insert(0, os.path.dirname(__file__))
 from hub import Hub, now
+from zoneinfo import ZoneInfo
+
+FARM_TZ = ZoneInfo("America/New_York")
 
 HERE = os.path.dirname(__file__)
 CFG = json.load(open(os.path.join(HERE, "..", "data", "feeds.json")))
@@ -83,11 +86,28 @@ def deere_fields(text, fields, year):
     return ops_to_snaps(ops, fields, year, "Deere CSV")
 
 
+def farm_day(stamp):
+    """The farm-local calendar day of a Deere timestamp ('2026-06-05T23:30:00Z' is Jun 5 in Georgia,
+    '2026-06-06T01:00:00Z' is too). A bare date stays as it is."""
+    stamp = (stamp or "").strip()
+    if len(stamp) <= 10:
+        return stamp[:10]
+    try:
+        t = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return stamp[:10]
+    if t.tzinfo is None:
+        return t.date().isoformat()
+    return t.astimezone(FARM_TZ).date().isoformat()
+
+
 def ops_to_snaps(ops, fields, year, source):
-    """{operation id: {field, type, end, acres, products}} -> the last operation and harvested acres per
-    Field Master field. Shared by the weekly CSV and the Ops Center API collector (collectors/deere.py)."""
+    """{operation id: {field, type, end, acres, products, rates?}} -> per Field Master field: the last
+    operation, harvested acres, the planting (first seeding) and every spray or fertilizer pass (the
+    wall's SPRAYS board and FERT panel). Shared by the weekly CSV and the Ops Center API collector
+    (collectors/deere.py)."""
     by_name = {norm(f["name"]): f for f in fields}
-    last, harvested, unmatched = {}, {}, set()
+    last, harvested, planted, apps, unmatched = {}, {}, {}, {}, set()
     for oid, op in ops.items():
         f = by_name.get(norm(op["field"]))
         if not f:
@@ -97,14 +117,29 @@ def ops_to_snaps(ops, fields, year, source):
             last[f["id"]] = (oid, op)
         if op["type"] == "harvest" and op["acres"]:
             harvested[f["id"]] = harvested.get(f["id"], 0) + op["acres"]
+        if op["type"] == "seeding" and op["end"] and (f["id"] not in planted or op["end"] < planted[f["id"]][1]["end"]):
+            planted[f["id"]] = (oid, op)
+        if op["type"] == "application" and op["end"]:
+            a = {"id": oid, "date": farm_day(op["end"]), "products": op["products"], "acres": op["acres"]}
+            if op.get("rates"):
+                a["rates"] = op["rates"]
+            apps.setdefault(f["id"], []).append(a)
+    url = "https://operationscenter.deere.com"
     snaps = []
     for fid, (oid, op) in last.items():
         snaps.append({"key": f"field:{fid}", "metric": "last_operation", "source": source, "source_id": oid,
-                      "source_url": "https://operationscenter.deere.com", "as_of": op["end"],
-                      "value": {"type": op["type"], "date": op["end"], "product": ", ".join(op["products"][:2]) or None, "acres": op["acres"]}})
+                      "source_url": url, "as_of": op["end"],
+                      "value": {"type": op["type"], "date": farm_day(op["end"]), "product": ", ".join(op["products"][:2]) or None, "acres": op["acres"]}})
     for fid, acres in harvested.items():
         snaps.append({"key": f"field:{fid}", "metric": "harvested_acres", "source": source, "source_id": f"harvest ops {year}",
-                      "source_url": "https://operationscenter.deere.com", "as_of": last[fid][1]["end"], "value": {"acres": round(acres, 1)}})
+                      "source_url": url, "as_of": last[fid][1]["end"], "value": {"acres": round(acres, 1)}})
+    for fid, (oid, op) in planted.items():
+        snaps.append({"key": f"field:{fid}", "metric": "planted", "source": source, "source_id": oid, "source_url": url,
+                      "as_of": op["end"], "value": {"date": farm_day(op["end"]), "variety": ", ".join(op["products"]) or None}})
+    for fid, rows in apps.items():
+        rows.sort(key=lambda a: (a["date"], a["id"]))
+        snaps.append({"key": f"field:{fid}", "metric": "applications", "source": source, "source_id": f"application ops {year}",
+                      "source_url": url, "as_of": rows[-1]["date"], "value": {"passes": rows}})
     return snaps, sorted(unmatched)
 
 

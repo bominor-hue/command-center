@@ -1,5 +1,5 @@
 import { FIELD_MASTER, FIELD_MASTER_SOURCE } from './fieldMaster'
-import type { HubState, LastOperation } from './types'
+import type { Application, HubState, LastOperation } from './types'
 
 // What the wall shows before the hub is connected: the real field list, with made-up statuses,
 // pivots, weather and agent work so the layout can be judged. Every panel is labeled SAMPLE.
@@ -25,6 +25,35 @@ export function sampleState(now = new Date()): HubState {
       else lastOps[f.id] = op('application', 25 + (n % 10), 'Prep')
     }
   }
+  // Plantings and passes a few weeks into the season whatever today is, so the SPRAYS board and FERT
+  // panel can be judged out of season too.
+  const plantings: HubState['plantings'] = {}
+  const applications: HubState['applications'] = {}
+  for (const f of FIELD_MASTER) {
+    const n = f.name.length * 7 + Math.round(f.plannedAcres)
+    const planted = dayIso(-(38 + (n % 55)), now)
+    plantings[f.id] = { date: planted, variety: f.crop === 'Peanuts' ? 'GA-06G' : f.crop === 'Cotton' ? 'DP 2333 B3XF' : 'DKC68-35', source: src }
+    const apps: Application[] = []
+    const add = (dap: number, products: string[], rates?: Application['rates']) => {
+      const date = new Date(Date.parse(planted + 'T12:00:00Z') + dap * 86400000).toISOString().slice(0, 10)
+      if (date <= dayIso(0, now)) apps.push({ date, products, acres: f.plannedAcres, rates, source: src })
+    }
+    if (f.crop === 'Peanuts') {
+      const fungicides = [['Elatus', 'Bravo WeatherStik'], ['Provost Silver'], ['Miravis', 'Tebuconazole'], ['Bravo WeatherStik']]
+      ;[45, 60, 75, 90, 105].forEach((d, i) => { if (!(n % 4 === 0 && i >= 1)) add(d + (n % 4), fungicides[i % 4]) })
+    } else if (f.crop === 'Cotton') {
+      add(-1, ['Reflex', 'Warrant'])
+      add(26 + (n % 5), ['Choice Trio', 'Liberty', 'Dual Magnum', 'Strut'])
+      add(35 + (n % 4), ['28-0-0-5'], [{ product: '28-0-0-5', rate: 10 + (n % 4), unit: 'gal1ac-1' }])
+      add(48 + (n % 6), ['Choice Trio', 'Liberty', 'Pix 6x', 'Warrant'])
+      if (n % 2) add(58, ['Bidrin 8', 'Full-bor', 'Pix 6x'])
+    } else {
+      add(0, ['19-11-0Z'])
+      add(18 + (n % 5), ['Roundup', 'Atrazine 4L', 'Mesotrione', 'Choice Trio'])
+      add(30 + (n % 6), ['28-0-0-5'], [{ product: '28-0-0-5', rate: 28 + (n % 8), unit: 'gal1ac-1' }])
+    }
+    applications[f.id] = apps
+  }
   const pivots: HubState['pivots'] = [
     { id: 'p47', farmId: 'hodges', name: 'Hodges 7', profile: { hoursPerRev100: { value: 18, source: 'Sample', at: at(0, now) } } },
     { id: 'p12', farmId: 'ab', name: 'A&B 12', profile: { hoursPerRev100: { value: 14, source: 'Sample', at: at(0, now) } } },
@@ -37,7 +66,7 @@ export function sampleState(now = new Date()): HubState {
   const days = (rains: number[]) => rains.map((r, i) => ({ date: dayIso(i, now), name: i === 0 ? 'Today' : dayName(i, now), hi: [76, 78, 69, 66, 71][i], lo: [55, 58, 60, 50, 48][i], rainIn: r, pop: r ? 80 : 10, short: r >= 1 ? 'Rain, heavy at times' : r ? 'Showers' : 'Sunny' }))
   return {
     live: false, loadedAt: now.toISOString(), error: null,
-    fields: FIELD_MASTER, lastOps, harvested,
+    fields: FIELD_MASTER, lastOps, harvested, plantings, applications,
     pivots, pivotFields: [], farms: [],
     entries: [entry('e1', 'p47', 20, 100), entry('e2', 'p12', 13.4, 100), entry('e3', 'p31', 5, 50)],
     rain: [],

@@ -6,7 +6,7 @@ import type { Season } from '../hub/types'
 export const SEASONS: { id: Season; label: string; from: [number, number]; note: string }[] = [
   { id: 'off', label: 'Off-season', from: [12, 1], note: 'Off-season layout: deadlines, equipment service and next year’s crop plan lead. Money and markets join in v3.' },
   { id: 'planting', label: 'Planting', from: [4, 1], note: 'Planting layout: planter progress on the field board, weather windows and water lead.' },
-  { id: 'growing', label: 'Growing', from: [5, 16], note: 'Growing layout: water balance and pivots lead, then weather and the field board.' },
+  { id: 'growing', label: 'Growing', from: [5, 16], note: 'Growing layout: spray schedules lead (peanut fungicide, cotton herbicide, Pix and insecticide, corn, fertilizer), with pivots, fertilizer and weather under them.' },
   { id: 'harvest', label: 'Harvest', from: [9, 1], note: 'Harvest layout: field board first (harvest before rain), then harvest progress, weather and water.' },
 ]
 
@@ -34,12 +34,12 @@ export const SEGMENTS: { id: Season; left: number; width: number }[] = [
   { id: 'off', left: 91.6, width: 8.4 },
 ]
 
-export type PanelId = 'fieldboard' | 'needs' | 'water' | 'weather' | 'harvest' | 'crew' | 'fleet' | 'deadlines' | 'money'
+export type PanelId = 'fieldboard' | 'sprays' | 'needs' | 'water' | 'fert' | 'weather' | 'harvest' | 'crew' | 'fleet' | 'deadlines' | 'money'
 
 /** The big panel in the middle, then the four small ones under it, per season. */
 export const LAYOUTS: Record<Season, { lead: PanelId; row: [PanelId, PanelId, PanelId, PanelId] }> = {
   harvest: { lead: 'fieldboard', row: ['needs', 'water', 'harvest', 'weather'] },
-  growing: { lead: 'water', row: ['needs', 'weather', 'fieldboard', 'deadlines'] },
+  growing: { lead: 'sprays', row: ['needs', 'water', 'fert', 'weather'] },
   planting: { lead: 'fieldboard', row: ['needs', 'weather', 'fleet', 'water'] },
   off: { lead: 'fieldboard', row: ['needs', 'deadlines', 'fleet', 'money'] },
 }
