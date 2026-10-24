@@ -10,7 +10,7 @@ import { Launch } from './ui/Launch'
 import { Deadlines, derive, FieldBoard, FieldSheet, Harvest, News, NeedsYou, Water, Weather } from './ui/Panels'
 
 // The wall: header, ticker, season bar, three columns of panels, feed health footer (PRD, Screen
-// requirements). A fixed 1920 x 1080 stage scaled to the screen; stacked on a phone.
+// requirements). A fixed 1920 x 1080 stage scaled to the screen; on a phone one column, most urgent first (styles.css).
 
 const TABS = ['MAIN', 'OPS', 'WATER', 'HARVEST', 'FLEET', 'MONEY', 'MKTS', 'AGENTS']
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
@@ -112,7 +112,7 @@ export default function App() {
             <News s={s} office={office && !visitor} onHide={(n) => act(() => hideStory(n.id))} />
           </div>
           <div className="col">
-            {lead === 'fieldboard' ? panel('fieldboard', true) : <div style={{ flex: '0 0 470px', display: 'flex', minHeight: 0 }}>{panel(lead, true)}</div>}
+            {lead === 'fieldboard' ? panel('fieldboard', true) : <div className="lead" style={{ flex: '0 0 470px', display: 'flex', minHeight: 0 }}>{panel(lead, true)}</div>}
             <div className="row4">{row.map((p) => panel(p))}</div>
           </div>
           <div className="col">
