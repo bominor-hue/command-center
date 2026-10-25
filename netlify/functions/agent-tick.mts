@@ -1,5 +1,5 @@
-// Every minute: wake the agent runner when tasks are queued, and queue the Brief at 6 AM and 6 PM
-// farm time. Scheduled functions stop at 30 s, so the work itself runs in agent-run-background.
+// Every minute except on Sunday: wake the agent runner when tasks are queued, and queue the Brief at 6 AM
+// and 6 PM farm time. Scheduled functions stop at 30 s, so the work itself runs in agent-run-background.
 import type { Config } from '@netlify/functions'
 import { agentsPaused, cc, service } from '../lib/hub'
 
@@ -7,8 +7,11 @@ const farmHourMinute = () => {
   const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(new Date())
   return [Number(p.find((x) => x.type === 'hour')!.value) % 24, Number(p.find((x) => x.type === 'minute')!.value)]
 }
+const farmSunday = () => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(new Date()) === 'Sun'
 
 export default async function agentTick() {
+  // Sunday is Bo's day of rest: no briefs and no agent runs. Queued tasks wait for Monday.
+  if (farmSunday()) return new Response('sunday')
   const db = service()
   if (await agentsPaused(db)) {
     await cc(db).from('agent').update({ status: 'paused' }).eq('enabled', true).neq('status', 'paused')
