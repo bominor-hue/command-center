@@ -20,6 +20,7 @@
   --rust:#B5634A; --rust-hi:#EE9C84; --rust-bg:rgba(214,110,82,.15); --rust-rgb:238,156,132;
   --amber:#E9C16A; --amber-bg:rgba(226,182,90,.13); --amber-rgb:226,182,90;
   --green-bg:var(--olive-bg);
+  --proj:#9DC4E8; /* projected figures: blue, as in the harvest workbooks */
   /* Type */
   --serif:'Crimson Pro','Crimson Text',Georgia,serif;
   --sans:-apple-system,BlinkMacSystemFont,'SF Pro Text','Geist',system-ui,sans-serif;
@@ -59,6 +60,7 @@
   --brass-50:#6B5532; --pine:#2B3A28; --olive:#4D6835; --olive-rgb:77,104,53; --olive-bg:rgba(79,93,59,.12);
   --rust:#A65A3D; --rust-hi:#A3452A; --rust-rgb:166,82,52; --rust-bg:rgba(166,90,61,.12);
   --amber:#8F650E; --amber-rgb:160,118,20; --amber-bg:rgba(196,150,40,.15);
+  --proj:#2D6AA8;
   --shadow:0 1px 0 var(--hl) inset,0 0 0 1px rgba(74,56,28,.07),0 1px 3px rgba(74,56,28,.07),0 12px 30px -14px rgba(74,56,28,.22);
   --hdr-bg:rgba(251,248,242,.82); --th-bg:rgba(251,248,242,.92); --sheet-bg:rgba(255,253,249,.97); --scrim:rgba(60,45,20,.22);
   --glow:rgba(255,255,255,.7);
@@ -256,6 +258,56 @@ button.line:hover b{color:var(--gold)}
 .bar .track{height:6px;border-radius:6px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line);overflow:hidden}
 .bar .fill{height:100%;border-radius:6px;background:var(--gold);box-shadow:0 0 10px -1px rgba(var(--gold-rgb),.55);transition:width 800ms var(--ease)}
 
+/* Season views (HARVEST, PLANTING): the workbook dashboard on the wall */
+.season-view{flex:1}
+.crop-tabs button{font-weight:600;letter-spacing:.06em}
+.crop-tabs button .mono{font-weight:500;color:var(--fg4);margin-left:4px}
+.crop-tabs button[aria-pressed="true"] .mono{color:var(--gold)}
+.sv-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.sv-band{display:grid;grid-template-columns:340px minmax(0,1fr);gap:14px;padding:10px 14px 8px;flex:none}
+.sv-progress{display:flex;flex-direction:column;gap:8px}
+.sv-big{display:flex;align-items:flex-end;gap:12px}
+.sv-big .v{font-family:var(--serif);font-size:52px;font-weight:500;line-height:.9;color:var(--gold);font-variant-numeric:lining-nums tabular-nums;letter-spacing:-.02em}
+.sv-big .l{font-size:12px;color:var(--fg3);line-height:1.3;padding-bottom:3px}
+.sv-progress .bars{gap:7px}
+.sv-progress .bar .top{font-size:12px;margin-bottom:3px}
+.bar.soft .fill{background:var(--olive);box-shadow:0 0 10px -1px rgba(var(--olive-rgb),.5)}
+.sv-left{font-size:12px;color:var(--fg4)}
+.sv-kpis{display:grid;gap:6px;align-content:start}
+.sv-kpis .kpi{padding:6px 10px 6px}
+.sv-kpis .kpi .l{min-height:0;margin-bottom:3px;font-size:11.5px}
+.sv-kpis .kpi .v{font-size:25px}
+.sv-kpis .kpi .v small{font-size:15px;color:var(--fg4)}
+.sv-kpis .kpi .v.txt{font-family:var(--sans);font-size:13px;font-weight:500;line-height:1.3;padding-top:3px}
+.sv-a{display:grid;column-gap:10px;margin:0 14px;padding:4px 0 6px;border-top:1px solid var(--line);flex:none;font-size:12.5px}
+.sv-a > *{padding:3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-a .th{font-size:10.5px;font-weight:600;letter-spacing:.1em;color:var(--fg4)}
+.sv-a .num{text-align:right;font-family:var(--mono);font-size:12px}
+.sv-a .lbl{color:var(--fg2)}
+.sv-a .total > *{font-weight:600;color:var(--fg);border-top:1px solid var(--line2)}
+.sv-b-head{display:flex;align-items:center;gap:6px;padding:6px 14px;border-top:1px solid var(--line);flex:none}
+.sv-b-head .k,.sv-pace .k{font-size:10.5px;font-weight:700;letter-spacing:.14em;color:var(--gold);margin-right:6px}
+.sv-b{flex:1;min-height:0;overflow:auto;font-size:12.5px;border-top:1px solid var(--line)}
+.sv-b .tr{display:grid;gap:8px;align-items:center;padding:0 14px;min-height:26px;border-bottom:1px solid var(--line-row)}
+.sv-b .tr > *{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-b .th{font-size:10.5px;font-weight:600;letter-spacing:.1em;color:var(--fg4);position:sticky;top:0;z-index:1;background:var(--th-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.sv-b .num{text-align:right;font-family:var(--mono);font-size:12px}
+.sv-b .mono{font-size:12px;color:var(--fg2)}
+.sv-b .num.proj{color:var(--proj);font-style:italic}
+.sv-b b{font-weight:600}
+.sv-b .st{height:17px;font-size:9.5px;padding:0 7px 0 6px;vertical-align:1px}
+.sv-b .tr.st-final{color:var(--fg3)} .sv-b .tr.st-final b{color:var(--fg2);font-weight:500}
+.sv-b .tr:not(.th){animation:rise var(--t-slow) var(--ease) both;animation-delay:120ms}
+.sv-pace{display:flex;gap:12px;align-items:flex-end;padding:6px 14px 8px;border-top:1px solid var(--line);flex:none}
+.sv-pace .k{align-self:flex-start;padding-top:2px;white-space:nowrap}
+.sv-pace .weeks{flex:1;display:flex;gap:6px;align-items:flex-end;min-width:0;overflow:hidden}
+.sv-pace .wk{flex:1;max-width:64px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.sv-pace .wbar{width:100%;height:58px;display:flex;align-items:flex-end;border-radius:var(--r-xs);background:var(--well);box-shadow:inset 0 0 0 1px var(--line);overflow:hidden}
+.sv-pace .fill{width:100%;background:linear-gradient(180deg,var(--gold),rgba(var(--gold-rgb),.55));border-radius:var(--r-xs) var(--r-xs) 0 0;transform-origin:bottom;animation:rise-y 900ms var(--ease) both;animation-delay:250ms}
+@keyframes rise-y{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.sv-pace .n{font-family:var(--mono);font-size:11px;color:var(--fg2)}
+.sv-pace .d{font-size:10.5px;color:var(--fg4)}
+
 /* Weather */
 .wx{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
 .wx .d{background:var(--raise);box-shadow:0 1px 0 var(--hl) inset;border-radius:var(--r-md);padding:7px 2px 6px;text-align:center}
@@ -384,7 +436,7 @@ a.tile:hover .appicon{transform:translateY(-2px) scale(1.06)}
 .ftr > span:nth-child(6) .ok{animation-delay:1.2s}.ftr > span:nth-child(7) .ok{animation-delay:1.5s}.ftr > span:nth-child(8) .ok{animation-delay:1.8s}
 .ftr > span:nth-child(9) .ok{animation-delay:2.1s}.ftr > span:nth-child(10) .ok{animation-delay:2.4s}
 @keyframes breathe{0%,100%{opacity:1}50%{opacity:.45}}
-@media (prefers-reduced-motion: reduce){.ticker .run{transform:none}.bar .fill{transform:none}}
+@media (prefers-reduced-motion: reduce){.ticker .run{transform:none}.bar .fill{transform:none}.sv-pace .fill{transform:none}}
 
 /* Phone and small screens: panels stacked, page scrolls (PRD v2 phone layout, early) */
 @media (max-width: 1100px){
@@ -401,6 +453,9 @@ a.tile:hover .appicon{transform:translateY(-2px) scale(1.06)}
   .pb{overflow:visible}
   .table{overflow-x:auto}
   .table .tr{grid-template-columns:200px 70px 50px 46px 120px 200px 180px;width:max-content}
+  .sv-band{grid-template-columns:1fr}
+  .sv-a,.sv-b{overflow-x:auto}
+  .sv-b .tr{width:max-content;min-width:100%}
   .ftr{height:auto;flex-wrap:wrap;white-space:normal;padding:8px 12px;gap:10px}
   .ticker{overflow-x:auto}
 }

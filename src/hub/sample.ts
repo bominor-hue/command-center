@@ -1,5 +1,5 @@
 import { FIELD_MASTER, FIELD_MASTER_SOURCE } from './fieldMaster'
-import type { Application, HubState, LastOperation } from './types'
+import type { Application, CropHarvest, HarvestFieldRow, HarvestStatus, HubState, LastOperation } from './types'
 
 // What the wall shows before the hub is connected: the real field list, with made-up statuses,
 // pivots, weather and agent work so the layout can be judged. Every panel is labeled SAMPLE.
@@ -66,7 +66,7 @@ export function sampleState(now = new Date()): HubState {
   const days = (rains: number[]) => rains.map((r, i) => ({ date: dayIso(i, now), name: i === 0 ? 'Today' : dayName(i, now), hi: [76, 78, 69, 66, 71][i], lo: [55, 58, 60, 50, 48][i], rainIn: r, pop: r ? 80 : 10, short: r >= 1 ? 'Rain, heavy at times' : r ? 'Showers' : 'Sunny' }))
   return {
     live: false, loadedAt: now.toISOString(), error: null,
-    fields: FIELD_MASTER, lastOps, harvested, plantings, applications,
+    fields: FIELD_MASTER, lastOps, harvested, plantings, applications, harvest: sampleHarvest(now), seeding: [],
     pivots, pivotFields: [], farms: [],
     entries: [entry('e1', 'p47', 20, 100), entry('e2', 'p12', 13.4, 100), entry('e3', 'p31', 5, 50)],
     rain: [],
@@ -121,6 +121,75 @@ export function sampleState(now = new Date()): HubState {
     agentsPaused: false,
     signedInAsOffice: false,
   }
+}
+
+/** Made-up harvest workbook dashboards on the real field list (no real yields or dollars: the public
+ *  site shows the sample before anyone signs in). */
+function sampleHarvest(now: Date): CropHarvest[] {
+  const src = { source: 'Sample' }
+  const y = now.getFullYear()
+  const date = (m: number, d: number) => new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10)
+  const book = (crop: 'Peanuts' | 'Cotton' | 'Corn'): CropHarvest => {
+    const fs = FIELD_MASTER.filter((f) => f.crop === crop)
+    const corn = crop === 'Corn', cotton = crop === 'Cotton'
+    const share = corn ? 1 : cotton ? 0.35 : 0.7 // of fields finished
+    const rows: HarvestFieldRow[] = fs.map((f, i) => {
+      const n = (f.name.length * 7 + i * 13) % 100
+      const planted = corn ? date(3, 5 + Math.floor((i / fs.length) * 24)) : date(4, 15 + Math.floor((i / fs.length) * 50))
+      const done = i / fs.length < share
+      const status: HarvestStatus = done ? (n % 6 === 0 && !corn ? 'harvested' : 'final') : i / fs.length < share + 0.12 ? 'harvesting' : !corn && i / fs.length < share + 0.35 ? 'staged' : 'not_started'
+      const yld = corn ? 180 + (n % 60) : cotton ? 850 + (n % 9) * 60 : 3600 + (n % 12) * 150
+      const has = status !== 'not_started' && status !== 'staged'
+      const cells: Record<string, number | null> = {}
+      const units = has ? Math.max(1, Math.round((f.plannedAcres * yld) / (corn ? 1000 : cotton ? 2100 : 45000))) : null
+      return {
+        fsn: f.fsn, farm: f.farm.replace(/ farm$/i, ''), field: f.name, water: f.water, acres: f.plannedAcres,
+        variety: corn ? ['DKC 68-35', 'P18216PWE'][n % 2] : cotton ? ['DP 2537', 'DP 2618'][n % 2] : ['GA 06G', 'TifNV-HG'][n % 2],
+        planted, staged: status === 'not_started' || corn ? null : date(9, 12 + (i % 30)), harvested: done ? date(corn ? 8 : 9, 20 + (i % 30)) : null,
+        basis: corn ? (done ? 'Harvested' : null) : null, status, projected: status === 'harvesting' || status === 'harvested',
+        cells: Object.assign(cells, corn
+          ? { 'harvested ac': has ? f.plannedAcres : null, loads: units, 'combine bu': has ? f.plannedAcres * yld : null, 'combine yield': has ? yld : null, 'hauled bu': has ? f.plannedAcres * yld * 1.01 : null }
+          : cotton
+            ? { 'modules picked': units, 'modules ginned': null, bales: has ? (f.plannedAcres * yld) / 480 : null, 'turnout %': null, 'lint yield (lbs/ac)': has ? yld : null, '2025 yield': 1000 + (n % 5) * 80, 'vs 2025 (lbs/ac)': has ? yld - (1000 + (n % 5) * 80) : null }
+            : { loads: units, 'avg grade (wtd)': has ? 70 + (n % 6) : null, 'avg lsk (wtd)': has ? 2 + (n % 4) * 0.5 : null, 'total pounds': has ? f.plannedAcres * yld : null, 'yield (lbs/ac)': has ? yld : null, 'value / acre $': status === 'final' ? yld * 0.29 : null }),
+      }
+    })
+    const sum = (pred: (r: HarvestFieldRow) => boolean, w?: string) => rows.filter((r) => pred(r) && (!w || r.water === w)).reduce((a, r) => a + (r.acres ?? 0), 0)
+    const planted = sum(() => true), staged = corn ? null : sum((r) => r.status !== 'not_started'), harvestedAc = sum((r) => r.status === 'final' || r.status === 'harvested')
+    const lbs = rows.reduce((a, r) => a + (r.cells[corn ? 'combine bu' : cotton ? 'lint yield (lbs/ac)' : 'total pounds'] ?? 0) * (cotton ? r.acres ?? 0 : 1), 0)
+    const yieldAc = harvestedAc ? lbs / harvestedAc : null
+    const totalRow = (label: string, w?: string): CropHarvest['summary'][number] => {
+      const pl = sum(() => true, w), st = sum((r) => r.status !== 'not_started', w), hv = sum((r) => r.status === 'final' || r.status === 'harvested', w)
+      return corn
+        ? { label, 'planted ac': pl, 'harvested ac': hv, '% done': pl ? hv / pl : null, 'combine bu': hv * (yieldAc ?? 0), yield: yieldAc }
+        : cotton
+          ? { label, 'planted acres': pl, 'acres defoliated': st, 'acres harvested': hv, 'acres left to pick': pl - hv, 'modules picked': null, 'modules ginned': 0, 'bales (est. until ginned)': (hv * (yieldAc ?? 0)) / 480, 'lint yield (lbs/ac)': yieldAc }
+          : { label, 'planted acres': pl, 'acres dug': st, 'acres harvested': hv, 'acres to pick': st - hv, 'total net lbs': hv * (yieldAc ?? 0), 'avg grade tsmk % (wtd)': 72.4, 'avg lsk % (wtd)': 3.1, 'yield (lbs/ac)': yieldAc, 'actual field value': null, 'actual value / acre': null }
+    }
+    return {
+      crop, stage: corn ? null : cotton ? 'Defoliated' : 'Dug', unit: corn ? 'bu/ac' : cotton ? 'lint lbs/ac' : 'lbs/ac', unitsLabel: cotton ? 'Modules' : 'Loads',
+      progress: { planted, staged, harvested: harvestedAc },
+      summaryCols: corn
+        ? [{ key: 'planted ac', label: 'Planted', fmt: 'ac' }, { key: 'harvested ac', label: 'Harvested', fmt: 'ac' }, { key: '% done', label: 'Done', fmt: 'pct' }, { key: 'combine bu', label: 'Combine bu', fmt: 'int' }, { key: 'yield', label: 'Yield', fmt: 'dec1' }]
+        : cotton
+          ? [{ key: 'planted acres', label: 'Planted', fmt: 'ac' }, { key: 'acres defoliated', label: 'Defoliated', fmt: 'ac' }, { key: 'acres harvested', label: 'Harvested', fmt: 'ac' }, { key: 'acres left to pick', label: 'Left', fmt: 'ac' }, { key: 'bales (est. until ginned)', label: 'Bales', fmt: 'int' }, { key: 'lint yield (lbs/ac)', label: 'Lint yield', fmt: 'int' }]
+          : [{ key: 'planted acres', label: 'Planted', fmt: 'ac' }, { key: 'acres dug', label: 'Dug', fmt: 'ac' }, { key: 'acres harvested', label: 'Harvested', fmt: 'ac' }, { key: 'acres to pick', label: 'To pick', fmt: 'ac' }, { key: 'total net lbs', label: 'Net lbs', fmt: 'int' }, { key: 'avg grade tsmk % (wtd)', label: 'TSMK', fmt: 'dec1' }, { key: 'avg lsk % (wtd)', label: 'LSK', fmt: 'dec1' }, { key: 'yield (lbs/ac)', label: 'Yield', fmt: 'int' }],
+      summary: corn ? [totalRow('Sample entity'), totalRow('Total')] : [totalRow('Irrigated', 'Irrigated'), totalRow('Dryland', 'Dryland'), totalRow('Total')],
+      kpis: corn
+        ? [{ label: 'Combine bu', value: lbs, fmt: 'int' }, { label: 'Yield bu/ac', value: yieldAc, fmt: 'dec1' }, { label: 'In bins', value: lbs * 0.4, fmt: 'int' }]
+        : cotton
+          ? [{ label: 'Modules picked', value: rows.reduce((a, r) => a + (r.cells['modules picked'] ?? 0), 0), fmt: 'int' }, { label: 'Bales', value: (harvestedAc * (yieldAc ?? 0)) / 480, fmt: 'int', note: 'est. until ginned' }, { label: 'Lint lbs/ac', value: yieldAc, fmt: 'int' }]
+          : [{ label: 'Net lbs', value: lbs, fmt: 'int' }, { label: 'Yield lbs/ac', value: yieldAc, fmt: 'int' }, { label: 'Grade TSMK', value: 72.4, fmt: 'dec1' }, { label: 'LSK', value: 3.1, fmt: 'dec1' }, { label: 'Field value', value: lbs * 0.29, fmt: 'money0' }, { label: 'Value / ac', value: (yieldAc ?? 0) * 0.29, fmt: 'money0' }],
+      fieldCols: corn
+        ? [{ key: 'harvested ac', label: 'Harv ac', fmt: 'ac' }, { key: 'loads', label: 'Loads', fmt: 'int' }, { key: 'combine bu', label: 'Combine bu', fmt: 'int' }, { key: 'combine yield', label: 'Yield', fmt: 'dec1' }]
+        : cotton
+          ? [{ key: 'modules picked', label: 'Mods', fmt: 'int' }, { key: 'bales', label: 'Bales', fmt: 'int' }, { key: 'lint yield (lbs/ac)', label: 'Yield', fmt: 'int' }, { key: '2025 yield', label: '2025', fmt: 'int' }, { key: 'vs 2025 (lbs/ac)', label: 'vs 2025', fmt: 'signed' }]
+          : [{ key: 'loads', label: 'Loads', fmt: 'int' }, { key: 'avg grade (wtd)', label: 'TSMK', fmt: 'dec1' }, { key: 'avg lsk (wtd)', label: 'LSK', fmt: 'dec1' }, { key: 'total pounds', label: 'Lbs', fmt: 'int' }, { key: 'yield (lbs/ac)', label: 'Yield', fmt: 'int' }, { key: 'value / acre $', label: '$/ac', fmt: 'money' }],
+      fields: rows, note: 'sample figures, not the workbook', workbook: { name: `${y} ${crop === 'Peanuts' ? 'Peanut' : crop} Harvest (sample)`, url: null, modifiedAt: at(3, now) },
+      asOf: at(3, now), source: src,
+    }
+  }
+  return [book('Peanuts'), book('Cotton'), book('Corn')]
 }
 
 export const SAMPLE_NOTE = `Sample data on the real ${FIELD_MASTER_SOURCE} field list. Connect the hub to see live values.`

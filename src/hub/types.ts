@@ -62,6 +62,34 @@ export interface FeedHealth { id: string; name: string; lastOk: string | null; o
 export interface Deadline { id: string; title: string; date: string; url: string | null; source: string }
 export interface NewsItem { id: string; title: string; source: string; tag: string; url: string; publishedAt: string }
 
+/** A harvest workbook's dashboard (collectors/harvest_workbooks.py): Section A totals, the headline
+ *  figures, and one row per field, with the columns the workbook shows. */
+export type HarvestFmt = 'ac' | 'int' | 'dec1' | 'pct' | 'money' | 'money0' | 'signed' | 'text'
+export interface HarvestCol { key: string; label: string; fmt: HarvestFmt }
+/** not started, dug or defoliated, loads or modules coming in, finished but still estimated, final */
+export type HarvestStatus = 'not_started' | 'staged' | 'harvesting' | 'harvested' | 'final'
+export interface HarvestFieldRow {
+  fsn: string | null; farm: string | null; field: string; water: string | null; acres: number | null; variety: string | null
+  planted: string | null; staged: string | null; harvested: string | null; basis: string | null
+  status: HarvestStatus; projected: boolean; cells: Record<string, number | null>
+}
+export interface CropHarvest {
+  crop: Crop
+  stage: string | null // the step before harvest: 'Dug' (peanuts), 'Defoliated' (cotton); corn has none
+  unit: string; unitsLabel: string
+  progress: { planted: number; staged: number | null; harvested: number }
+  summaryCols: HarvestCol[]
+  summary: ({ label: string } & Record<string, number | string | null>)[]
+  kpis: { label: string; value: number | string | null; fmt: HarvestFmt; note?: string }[]
+  fieldCols: HarvestCol[]
+  fields: HarvestFieldRow[]
+  note: string | null
+  workbook: { name: string; url: string | null; modifiedAt: string } | null
+  asOf: string; source: SourceRef
+}
+/** A Deere seeding operation (cc.deere_op), for the planting tracker. */
+export interface SeedingOp { field: string; crop: string | null; date: string; acres: number | null; variety: string | null }
+
 /** Everything the wall shows, and whether it came from the hub or the built-in sample. */
 export interface HubState {
   live: boolean // false = sample data: every panel says so
@@ -72,6 +100,8 @@ export interface HubState {
   harvested: Record<string, { acres: number; asOf: string; source: SourceRef }> // by field id
   plantings: Record<string, Planting> // by field id
   applications: Record<string, Application[]> // by field id, every pass this crop year
+  harvest: CropHarvest[] // the harvest workbooks' dashboards, one per crop
+  seeding: SeedingOp[] // this crop year's Deere planting operations
   pivots: PivotDoc[]
   pivotFields: PivotFieldDoc[]
   farms: FarmDoc[]

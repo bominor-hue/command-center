@@ -15,6 +15,7 @@ on:
     - cron: '7 * * * *'     # hourly: NWS forecast, news
     - cron: '0 9 * * 1'     # Monday 4-5 am: Field Master (also on every change to the CSV)
     - cron: '40 */2 * * *'  # every 2 hours: Deere Ops Center
+    - cron: '20,50 * * * *' # every 30 min: the harvest workbooks (read only when one changed)
   push:
     branches: [main]
     paths: [data/field_master_2026.csv]
@@ -23,7 +24,7 @@ on:
       job:
         description: 'Which collector'
         type: choice
-        options: [all, google, nws, news, field-master, deere]
+        options: [all, google, nws, news, field-master, deere, harvest]
         default: all
 env:
   SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
@@ -79,3 +80,24 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python3 collectors/deere.py
+  harvest:
+    if: github.event.schedule == '20,50 * * * *' || inputs.job == 'all' || inputs.job == 'harvest'
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      # A cheap look at Drive first; LibreOffice (to recalculate the workbooks) is only installed when a workbook changed.
+      - id: check
+        run: |
+          if [ -z "$GOOGLE_REFRESH_TOKEN" ]; then echo "::notice::Google feeds not set up yet (GOOGLE_* secrets missing); skipped."; echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          python3 collectors/harvest_workbooks.py --check
+      - if: steps.check.outputs.changed == 'true'
+        run: |
+          pip install openpyxl
+          command -v soffice || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libreoffice-calc)
+          python3 collectors/harvest_workbooks.py

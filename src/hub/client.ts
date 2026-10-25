@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { FIELD_MASTER, FIELD_MASTER_SOURCE } from './fieldMaster'
-import type { Agent, Alert, Application, Deadline, EntryRow, FarmForecast, FeedHealth, FieldRow, HubState, LastOperation, NewsItem, Planting, Task } from './types'
+import type { Agent, Alert, Application, CropHarvest, Deadline, EntryRow, FarmForecast, FeedHealth, FieldRow, HubState, LastOperation, NewsItem, Planting, SeedingOp, Task } from './types'
 
 // The hub is the `cc` schema in the farm hub's own Supabase project (supabase/cc_hub.sql). Pivot Log's
 // data arrives there as the pl_* copies. The wall only reads, plus the few office actions row security allows.
@@ -35,10 +35,11 @@ export async function loadHub(now = new Date()): Promise<HubState> {
   const since21 = new Date(now.getTime() - 21 * 86400000).toISOString()
   const since2 = new Date(now.getTime() - 2 * 86400000).toISOString().slice(0, 10)
 
-  const [fieldRows, snaps, wallApps, alerts, briefs, agents, tasks, approvals, feeds, news, control, cal, pivots, pivotFields, farms, entries, rain, office] = await Promise.all([
+  const [fieldRows, snaps, wallApps, seeding, alerts, briefs, agents, tasks, approvals, feeds, news, control, cal, pivots, pivotFields, farms, entries, rain, office] = await Promise.all([
     rows<any>(cc().from('field').select('*').eq('crop_year', now.getFullYear())),
-    rows<any>(cc().from('snapshot').select('key,metric,value,source,source_id,source_url,as_of').in('metric', ['forecast', 'last_operation', 'harvested_acres', 'planted', 'applications'])),
+    rows<any>(cc().from('snapshot').select('key,metric,value,source,source_id,source_url,as_of').in('metric', ['forecast', 'last_operation', 'harvested_acres', 'planted', 'applications', 'harvest_dashboard'])),
     rows<any>(cc().from('application').select('*').gte('applied_on', `${now.getFullYear()}-01-01`)),
+    rows<any>(cc().from('deere_op').select('field_name,crop_name,end_at,start_at,area_acres,products').eq('operation_type', 'seeding').eq('crop_season', String(now.getFullYear()))),
     rows<any>(cc().from('alert').select('*').is('cleared_at', null).is('handled_at', null).order('opened_at', { ascending: false })),
     rows<any>(cc().from('brief').select('*').order('written_at', { ascending: false }).limit(1)),
     rows<any>(cc().from('agent').select('*').order('sort')),
@@ -67,12 +68,14 @@ export async function loadHub(now = new Date()): Promise<HubState> {
   const plantings: Record<string, Planting> = {}
   const applications: Record<string, Application[]> = {}
   const addApp = (id: string, a: Application) => (applications[id] ??= []).push(a)
+  const harvest: CropHarvest[] = []
   for (const s of snaps) {
     const id = s.key.replace(/^field:/, '')
     if (s.metric === 'last_operation') lastOps[id] = { ...s.value, source: src(s) }
     else if (s.metric === 'planted') plantings[id] = { date: s.value.date, variety: s.value.variety ?? null, source: src(s) }
     else if (s.metric === 'applications') for (const a of s.value.passes ?? []) addApp(id, { date: a.date, products: a.products ?? [], acres: a.acres ?? null, rates: a.rates, source: { source: s.source, id: a.id, url: s.source_url } })
     else if (s.metric === 'harvested_acres') harvested[id] = { acres: Number(s.value.acres) || 0, asOf: s.as_of, source: src(s) }
+    else if (s.metric === 'harvest_dashboard') harvest.push({ ...s.value, asOf: s.as_of, source: src(s) })
     else if (s.metric === 'forecast') forecasts.push({ farm: s.key.replace(/^farm:/, ''), days: s.value.days, sprayWindow: s.value.sprayWindow ?? null, asOf: s.as_of, source: src(s) })
   }
   for (const a of wallApps) addApp(a.field_id, {
@@ -83,7 +86,8 @@ export async function loadHub(now = new Date()): Promise<HubState> {
   const b = briefs[0]
   return {
     live: true, loadedAt: now.toISOString(), error: null,
-    fields, lastOps, harvested, forecasts, plantings, applications,
+    fields, lastOps, harvested, forecasts, plantings, applications, harvest,
+    seeding: seeding.map((o): SeedingOp => ({ field: o.field_name, crop: o.crop_name, date: o.end_at ?? o.start_at, acres: o.area_acres == null ? null : Number(o.area_acres), variety: o.products?.[0] ?? null })).filter((o) => o.date),
     pivots: pivots.map((r) => r.data), pivotFields: pivotFields.map((r) => r.data), farms: farms.map((r) => r.data),
     entries, rain: rain.map((r) => r.data),
     alerts: alerts.filter((a) => !a.snoozed_until || Date.parse(a.snoozed_until) < now.getTime())
