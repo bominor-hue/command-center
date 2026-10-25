@@ -34,7 +34,7 @@ describe('cc hub schema', { timeout: 30000 }, () => {
     const pg = await setup()
     await pg.exec(sql)
     expect((await pg.query<{ n: number }>('select count(*)::int n from cc.agent')).rows[0].n).toBe(8)
-    expect((await pg.query<{ n: number }>('select count(*)::int n from cc.feed')).rows[0].n).toBe(11)
+    expect((await pg.query<{ n: number }>('select count(*)::int n from cc.feed')).rows[0].n).toBe(12)
     expect((await pg.query<{ n: number }>('select count(*)::int n from cc.control')).rows[0].n).toBe(1)
   })
 

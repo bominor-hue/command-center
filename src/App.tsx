@@ -7,6 +7,7 @@ import { useHub, useLocal, useNow } from './hub/useHub'
 import { AgentsPanels } from './ui/Agents'
 import { ago, Pending, TZ } from './ui/common'
 import { Launch } from './ui/Launch'
+import { HarvestView, PlantingView } from './ui/Season'
 import { Deadlines, derive, FieldBoard, FieldSheet, Harvest, News, NeedsYou, Water, Weather } from './ui/Panels'
 
 // The wall: header, ticker, season bar, three columns of panels, feed health footer (PRD, Screen
@@ -17,6 +18,8 @@ const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', '
 /** Panels Visitor mode hides (PRD: money, markets, crew details and the agent queue), and what fills their place. */
 const VISITOR_HIDES = new Set<PanelId>(['needs', 'crew', 'money', 'deadlines'])
 const VISITOR_FILL: PanelId[] = ['harvest', 'weather', 'water', 'fieldboard']
+/** The season views (harvest and planting dashboards) take a taller slot in the middle. */
+const SEASON_VIEWS = new Set<PanelId>(['harvestdash', 'plantingdash'])
 const visitorPin = (import.meta.env.VITE_VISITOR_PIN as string | undefined) || ''
 
 function useStageScale() {
@@ -55,6 +58,8 @@ export default function App() {
       case 'water': return <Water key={p} s={s} d={d} lead={big} />
       case 'weather': return <Weather key={p} s={s} d={d} lead={big} />
       case 'harvest': return <Harvest key={p} s={s} />
+      case 'harvestdash': return <HarvestView key={p} s={s} visitor={visitor} />
+      case 'plantingdash': return <PlantingView key={p} s={s} now={now} />
       case 'deadlines': return <Deadlines key={p} s={s} />
       case 'crew': return <Pending key={p} code="CREW" label="Crew" waits="which system records hours" then="Then: who is on today, operator by machine and field, week hours, license renewals. Never pay or SSNs." />
       case 'fleet': return <Pending key={p} code="FLEET" label="Fleet" waits="the Deere connector (down since Oct 3) and Tecalemit exports" then="Then: machines working, idle and due for service; fuel tank levels." />
@@ -112,7 +117,7 @@ export default function App() {
             <News s={s} office={office && !visitor} onHide={(n) => act(() => hideStory(n.id))} />
           </div>
           <div className="col">
-            {lead === 'fieldboard' ? panel('fieldboard', true) : <div className="lead" style={{ flex: '0 0 470px', display: 'flex', minHeight: 0 }}>{panel(lead, true)}</div>}
+            {lead === 'fieldboard' ? panel('fieldboard', true) : <div className="lead" style={{ flex: `0 0 ${SEASON_VIEWS.has(lead) ? 540 : 470}px`, display: 'flex', minHeight: 0 }}>{panel(lead, true)}</div>}
             <div className="row4">{row.map((p) => panel(p))}</div>
           </div>
           <div className="col">

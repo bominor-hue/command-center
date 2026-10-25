@@ -6,5 +6,14 @@
     { "feed": "nutrien-filer", "name": "Nutrien Log", "file_id": "1GOpKcbRD_-qw3jj7rTcof16W0__T4GLl7sR0irGSoSA" },
     { "feed": "perry-filer", "name": "Perry Brothers Log", "file_id": "1Vs9ck_UadzUpRKGTgbrzujxE2fntQJka5aidlrDLvJ8" }
   ],
+  "harvest_workbooks": {
+    "_where": "The harvest folder in the shared Drive: the peanut, cotton and corn harvest workbooks (collectors/harvest_workbooks.py). {year} is the crop year.",
+    "folder_id": "1oGxtrQDZVIXrPiPzMydnRtmpDRezOOEf",
+    "files": [
+      { "crop": "Peanuts", "name": "{year} Peanut Harvest.xlsx" },
+      { "crop": "Cotton", "name": "{year} Cotton Harvest.xlsx" },
+      { "crop": "Corn", "name": "{year} Corn Harvest.xlsm" }
+    ]
+  },
   "calendar_id": "primary"
 }
