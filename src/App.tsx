@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LAYOUTS, SEASONS, SEGMENTS, seasonFor, yearPercent, type PanelId } from './domain/season'
-import { cancelTask, dispatchTask, hideStory, hubConfigured, hubSetupError, markHandled, setAgentsPaused, supabase } from './hub/client'
+import { cancelTask, deleteApplication, dispatchTask, hideStory, hubConfigured, hubSetupError, markHandled, recordApplication, setAgentsPaused, supabase } from './hub/client'
 import { SAMPLE_NOTE } from './hub/sample'
 import type { FieldRow, Season } from './hub/types'
 import { useHub, useLocal, useNow } from './hub/useHub'
 import { AgentsPanels } from './ui/Agents'
 import { ago, Pending, TZ } from './ui/common'
 import { Launch } from './ui/Launch'
+import { Fert, SprayBoard, SpraySheet } from './ui/Sprays'
 import { HarvestView, PlantingView } from './ui/Season'
 import { Deadlines, derive, FieldBoard, FieldSheet, Harvest, News, NeedsYou, Water, Weather } from './ui/Panels'
 
@@ -40,6 +41,7 @@ export default function App() {
   const [visitor, setVisitor] = useLocal('visitor', false)
   const [pinAsk, setPinAsk] = useState(false)
   const [field, setField] = useState<FieldRow | null>(null)
+  const [sprayField, setSprayField] = useState<FieldRow | null>(null)
   const [signIn, setSignIn] = useState(false)
   const season = pickedSeason ?? seasonFor(now)
   const d = useMemo(() => derive(s, season, now), [s, season, Math.floor(now.getTime() / 60000)]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -54,6 +56,8 @@ export default function App() {
   const panel = (p: PanelId, big = false) => {
     switch (p) {
       case 'fieldboard': return <FieldBoard key={p} s={s} d={d} compact={!big} onPick={setField} />
+      case 'sprays': return <SprayBoard key={p} s={s} d={d} office={office && !visitor} onPick={setSprayField} />
+      case 'fert': return <Fert key={p} s={s} />
       case 'needs': return <NeedsYou key={p} s={s} office={office} onHandle={(id) => act(() => markHandled(id))} />
       case 'water': return <Water key={p} s={s} d={d} lead={big} />
       case 'weather': return <Weather key={p} s={s} d={d} lead={big} />
@@ -137,6 +141,8 @@ export default function App() {
       </div>
 
       {field && <FieldSheet f={field} s={s} d={d} onClose={() => setField(null)} />}
+      {sprayField && <SpraySheet f={sprayField} s={s} office={office && !visitor} onClose={() => setSprayField(null)}
+        onRecord={async (a) => { await recordApplication(a); await reload() }} onDelete={(id) => act(() => deleteApplication(id))} />}
       {pinAsk && <PinSheet onClose={() => setPinAsk(false)} onOk={() => { setVisitor(false); setPinAsk(false) }} />}
       {signIn && <SignInSheet onClose={() => setSignIn(false)} />}
     </div>

@@ -16,6 +16,17 @@ export interface FieldRow {
 /** The latest Deere operation on a field, from the weekly Ops Center CSV. */
 export interface LastOperation { type: string; date: string; product: string | null; acres: number | null; source: SourceRef }
 
+/** A spray or fertilizer pass on a field: from Deere Ops Center (application operations), or entered
+ *  from the wall for passes Deere never sees (an airplane, a custom applicator). date is the farm-local day. */
+export interface Application {
+  date: string; products: string[]; acres: number | null
+  rates?: { product: string; rate: number; unit: string }[] // Deere units, e.g. 'gal1ac-1'
+  source: SourceRef
+  wallId?: number // set when the office entered it on the wall, so it can be taken back
+}
+/** When a field was planted: the first Deere seeding operation of the season. */
+export interface Planting { date: string; variety: string | null; source: SourceRef }
+
 /** Pivot Log rows (the `data` document). */
 export interface Sourced<T = number | string> { value: T; source: string; at: string }
 export interface PivotDoc { id: string; farmId: string; name: string; lat?: number | null; lon?: number | null; profile: Record<string, Sourced> }
@@ -87,6 +98,8 @@ export interface HubState {
   fields: FieldRow[]
   lastOps: Record<string, LastOperation> // by field id
   harvested: Record<string, { acres: number; asOf: string; source: SourceRef }> // by field id
+  plantings: Record<string, Planting> // by field id
+  applications: Record<string, Application[]> // by field id, every pass this crop year
   harvest: CropHarvest[] // the harvest workbooks' dashboards, one per crop
   seeding: SeedingOp[] // this crop year's Deere planting operations
   pivots: PivotDoc[]

@@ -5,7 +5,8 @@
   Operations every field of the org (data/feeds.json deere_api), this crop season -> cc.deere_op. An
              operation whose modifiedTime has not changed is not fetched again, so a run costs about
              one API call per field.
-  Snapshots  per Field Master field, the latest operation and harvested acres -> cc.snapshot (same
+  Snapshots  per Field Master field, the latest operation, harvested acres, the planting date and every
+             spray or fertilizer pass (with rates where Deere has them) -> cc.snapshot (same
              rows as the weekly CSV, which stops while this feed is current); Deere field names that
              match no Field Master field go to cc.exception.
 
@@ -101,6 +102,20 @@ def area_acres(measurements):
     return round(float(best[0]["value"]) * ACRES.get(str(best[0].get("unitId", "ha")).lower(), 1.0), 2)
 
 
+def rates(measurements):
+    """Average rate per product from an application's ApplicationRateResult, in Deere's units
+    ('gal1ac-1', 'lb1ac-1', ...): the FERT panel turns nitrogen products into lb N per acre."""
+    out = []
+    for m in measurements:
+        if m.get("measurementName") != "ApplicationRateResult":
+            continue
+        for p in m.get("productTotals") or []:
+            avg = p.get("averageMaterial") or {}
+            if p.get("name") and avg.get("value") is not None and avg.get("unitId"):
+                out.append({"product": str(p["name"]), "rate": round(float(avg["value"]), 3), "unit": str(avg["unitId"])})
+    return out
+
+
 def products(op):
     """Products for an application (tank-mix components by name), varieties for seeding and harvest."""
     out = []
@@ -121,7 +136,7 @@ def op_row(op, org_id, field):
 
 def pull(deere, hub, year):
     """Read this season's operations for every field into cc.deere_op. Returns the number of operations."""
-    known = {r["id"]: r for r in hub.call("GET", f"deere_op?select=id,modified_at,area_acres&crop_season=eq.{year}") or []}
+    known = {r["id"]: r for r in hub.call("GET", f"deere_op?select=id,modified_at,area_acres,rates&crop_season=eq.{year}") or []}
     client = CFG.get("client_name", "").strip().lower()
     rows = []
     for org in CFG["org_ids"]:
@@ -132,20 +147,22 @@ def pull(deere, hub, year):
                 row = op_row(op, org, f)
                 old = known.get(op["id"])
                 if old and old["modified_at"] == row["modified_at"]:
-                    row["area_acres"] = old["area_acres"]
+                    row["area_acres"], row["rates"] = old["area_acres"], old.get("rates") or []
                 else:
                     uri = link(op, "measurementTypes") or f"/fieldOperations/{op['id']}/measurementTypes"
-                    row["area_acres"] = area_acres(deere.get(uri).get("values", []))
+                    meas = deere.get(uri).get("values", [])
+                    row["area_acres"], row["rates"] = area_acres(meas), rates(meas)
                 rows.append(row)
     hub.upsert("deere_op", rows, on_conflict="id")
     return len(rows)
 
 
 def snapshots(hub, year):
-    """Last operation and harvested acres per Field Master field, from cc.deere_op."""
-    ops = {r["id"]: {"field": r["field_name"], "type": r["operation_type"], "end": (r["end_at"] or "")[:10],
-                     "acres": float(r["area_acres"]) if r["area_acres"] is not None else None, "products": r["products"] or []}
-           for r in hub.call("GET", f"deere_op?select=id,field_name,operation_type,end_at,area_acres,products&crop_season=eq.{year}") or []}
+    """Per Field Master field, from cc.deere_op: last operation, harvested acres, planting and spray passes."""
+    ops = {r["id"]: {"field": r["field_name"], "type": r["operation_type"], "end": r["end_at"] or "",
+                     "acres": float(r["area_acres"]) if r["area_acres"] is not None else None, "products": r["products"] or [],
+                     "rates": r.get("rates") or []}
+           for r in hub.call("GET", f"deere_op?select=id,field_name,operation_type,end_at,area_acres,products,rates&crop_season=eq.{year}") or []}
     fields = hub.call("GET", f"field?select=id,name&crop_year=eq.{year}") or []
     return ops_to_snaps(ops, fields, year, "Deere Ops Center")
 

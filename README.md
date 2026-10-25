@@ -12,6 +12,7 @@ data MCP server. Harvest by crew, the fleet panel, and the crew panel wait on an
 | Part | Where | What it does |
 |---|---|---|
 | Wall | `src/` (React, Vite) | 1920×1080 stage scaled to the screen; stacks on a phone. Season bar reorders panels. Launch tiles, NEEDS YOU, field board, water, weather by farm, harvest by crop, deadlines, news, agents (roster, task flow, assign a task). Visitor mode hides farm numbers; a PIN turns it off. With no Supabase settings it runs on the real Field Master with made-up statuses, labeled SAMPLE. |
+| Sprays (growing season) | `src/ui/Sprays.tsx`, `src/domain/sprays.ts`, `data/spray_programs.json` | The growing season's lead panel. One tab per program: peanut fungicide, cotton herbicide, cotton Pix, cotton insecticide, corn, and fertilizer. Each field shows its planting date, days after planting, passes done, the last pass and the next one due, with the status buckets from the Peanut Spray Schedule sheet (Overdue, Due within 5 days, Coming up within 14, On track, Complete). Passes and planting dates come from Deere application and seeding operations. The office can record a pass Deere never sees (an airplane, a custom applicator) from a field's sheet. FERT, the small panel, shows fertilizer passes and lb N/acre by crop where Deere has the rate. |
 | Hub | `supabase/cc_hub.sql` | The `cc` schema in the farm hub's own Supabase project: fields, snapshots, events, alerts, briefs, agents, tasks, feed runs, news, its own office logins, and the copy of Pivot Log's data (`pl_*`). |
 | Pivot sync | `netlify/functions/pivot-sync.mts` | Every 5 min: copies farms, pivots, pivot fields, new on/off entries and radar rain from Pivot Log, signed in there as a read-only viewer. Pivot Log stays its own project and is never written to. |
 | Water watch | `netlify/functions/water-watch.mts` | Every 15 min: red alert when a pivot runs past its lap time + 2 h (36 h with no lap time), red alert when a feed misses two runs. Same rules as Pivot Log. |
@@ -67,6 +68,14 @@ python3 -m pytest tests/python
 python3 collectors/nws.py --dry-run
 ```
 
+## Spray programs
+
+`data/spray_programs.json` holds the programs and what each product counts as. A program's `passes` are
+target days after planting; the n-th pass sprayed after planting fills the n-th one, and Next points at
+the first one not sprayed (the same rule as Bo's sheet). A program with no `passes` shows passes on file
+and days since the last one. Product names match by their start (`Pix 6x` is Pix). Names the list does
+not know are listed under the board as "Not sorted yet". Fertilizer N targets by crop live in the same file.
+
 ## Still open
 
 - **Which gin** gets the cotton, and how its tickets arrive. Needed for harvest by crop and modules.
@@ -74,6 +83,9 @@ python3 collectors/nws.py --dry-run
 - **Deere Harvest ID** module counts (cotton modules by field) are not pulled yet; the Deere feed covers
   field operations. Operations deleted in Ops Center stay in `cc.deere_op` until removed by hand.
 - **Entity codes** (JAMFF, MBFP, …) are not mapped to FSA producers yet; producers show as written.
+- **Spray timings**: only the peanut fungicide program has timings (45 DAP, then every 15 days to 135).
+  Cotton herbicide, Pix, insecticide, corn, and the N targets wait on Bo. So does where the peanut
+  fungicide passes are recorded, since they are not in Deere.
 - The news source URLs in `data/news_sources.json` have not been checked against the live feeds.
 
 ## Not built yet

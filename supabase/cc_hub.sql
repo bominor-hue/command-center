@@ -253,10 +253,31 @@ create table if not exists cc.deere_op (
   end_at timestamptz,
   area_acres numeric,                  -- area worked, from the operation's measurements
   products text[] not null default '{}', -- products, tank mixes or varieties
+  rates jsonb not null default '[]',   -- [{product, rate, unit}] for applications, Deere's units
   modified_at text,                    -- Deere's modifiedTime; a change refetches the measurements
   updated_at timestamptz not null default now()
 );
 create index if not exists deere_op_field on cc.deere_op (field_name, end_at desc);
+alter table cc.deere_op add column if not exists rates jsonb not null default '[]';
+
+-- Spray and fertilizer passes Deere never sees (an airplane, a custom applicator, Nutrien's spreader),
+-- entered by the office from the wall's SPRAYS board or by a collector. Deere's own passes come from
+-- cc.deere_op through the 'applications' snapshot; the board shows both.
+create table if not exists cc.application (
+  id bigint generated always as identity primary key,
+  field_id text not null,              -- cc.field id, '2026|A&B #5W'
+  applied_on date not null,            -- farm-local day
+  products text[] not null check (cardinality(products) > 0),
+  acres numeric,
+  rates jsonb not null default '[]',   -- [{product, rate, unit}], unit as Deere writes it ('gal1ac-1', 'lb1ac-1')
+  applicator text,                     -- who put it on, as written
+  note text,
+  source text not null default 'Wall', -- 'Wall', 'Nutrien Echelon', ...
+  source_url text,
+  entered_by text default (auth.jwt() ->> 'email'),
+  created_at timestamptz not null default now()
+);
+create index if not exists application_field on cc.application (field_id, applied_on);
 
 -- The Deere sign-in (one row). Written by netlify/functions/deere-auth.mts when the office signs in
 -- to Deere, and by the collector whenever Deere hands back a new refresh token. Service key only: no
@@ -309,7 +330,7 @@ on conflict (id) do update set name = excluded.name, every_minutes = excluded.ev
 
 -- Row security ---------------------------------------------------------------------------------------------
 do $$ declare t text; begin
-  foreach t in array array['field','snapshot','event','alert','brief','agent','task','agent_run','approval','control','feed','feed_run','exception','news','office_user','pl_farm','pl_pivot','pl_field','pl_rain_day','pl_entry','deere_op'] loop
+  foreach t in array array['field','snapshot','event','alert','brief','agent','task','agent_run','approval','control','feed','feed_run','exception','news','office_user','pl_farm','pl_pivot','pl_field','pl_rain_day','pl_entry','deere_op','application'] loop
     execute format('alter table cc.%I enable row level security', t);
     execute format('drop policy if exists %I on cc.%I', t || '_read', t);
     execute format('create policy %I on cc.%I for select to authenticated using (true)', t || '_read', t);
@@ -336,13 +357,21 @@ drop policy if exists news_office on cc.news;
 create policy news_office on cc.news for update to authenticated using (cc.is_office()) with check (cc.is_office());
 grant update (hidden) on cc.news to authenticated;
 
+-- The office records a pass Deere doesn't have, and takes back one it entered by mistake.
+drop policy if exists application_office_insert on cc.application;
+create policy application_office_insert on cc.application for insert to authenticated with check (cc.is_office());
+drop policy if exists application_office_delete on cc.application;
+create policy application_office_delete on cc.application for delete to authenticated using (cc.is_office() and source = 'Wall');
+grant insert (field_id, applied_on, products, acres, applicator, note) on cc.application to authenticated;
+grant delete on cc.application to authenticated;
+
 drop policy if exists control_office on cc.control;
 create policy control_office on cc.control for update to authenticated using (cc.is_office()) with check (cc.is_office());
 grant update (agents_paused, paused_at, paused_by) on cc.control to authenticated;
 
 -- Live updates to the wall (Supabase Realtime).
 do $$ declare t text; begin
-  foreach t in array array['alert','brief','agent','task','control','feed_run','news','snapshot','pl_entry'] loop
+  foreach t in array array['alert','brief','agent','task','control','feed_run','news','snapshot','pl_entry','application'] loop
     begin
       execute format('alter publication supabase_realtime add table cc.%I', t);
     exception when duplicate_object then null; when undefined_object then null;
