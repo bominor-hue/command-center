@@ -279,6 +279,7 @@ button.line:hover b{color:var(--gold)}
 .sv-kpis .kpi .v{font-size:25px}
 .sv-kpis .kpi .v small{font-size:15px;color:var(--fg4)}
 .sv-kpis .kpi .v.txt{font-family:var(--sans);font-size:13px;font-weight:500;line-height:1.3;padding-top:3px}
+.sv-a-scroll{display:contents}
 .sv-a{display:grid;column-gap:10px;margin:0 14px;padding:4px 0 6px;border-top:1px solid var(--line);flex:none;font-size:12.5px}
 .sv-a > *{padding:3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sv-a .th{font-size:10.5px;font-weight:600;letter-spacing:.1em;color:var(--fg4)}
@@ -451,7 +452,7 @@ a.tile:hover .appicon{transform:translateY(-2px) scale(1.06)}
   .season{height:auto;flex-wrap:wrap;padding:12px}
   .season .note{width:100%}
   .main{display:flex;flex-direction:column}
-  .col,.row4,.lead{display:contents}
+  .col,.row4,.lead{display:contents!important} /* !important: the lead wrapper sets display:flex inline */
   .main .panel{flex:none!important;max-height:none;order:3}
   .main .panel[aria-label="Needs you"]{order:1}
   .main .board,.main .lead > .panel{order:2}
@@ -462,7 +463,9 @@ a.tile:hover .appicon{transform:translateY(-2px) scale(1.06)}
   .table{overflow-x:auto}
   .table .tr{grid-template-columns:200px 70px 50px 46px 120px 200px 180px;width:max-content}
   .sv-band{grid-template-columns:1fr}
-  .sv-a,.sv-b{overflow-x:auto}
+  .sv-a-scroll{display:block;flex:none;overflow-x:auto;margin:0 14px}
+  .sv-a{width:max-content;min-width:100%;margin:0}
+  .sv-b{overflow-x:auto}
   .sv-b .tr{width:max-content;min-width:100%}
   .table:not(.all) .tr:nth-child(n+10){display:none} /* header row + PHONE_ROWS */
   .fb-more{display:block;width:100%;height:44px;font-size:13px;font-weight:600;color:var(--gold);border-top:1px solid var(--line)}
