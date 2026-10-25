@@ -87,14 +87,16 @@ function HarvestBody({ h, visitor }: { h: CropHarvest; visitor: boolean }) {
         </div>
       </div>
 
-      <div className="sv-a" role="table" aria-label="Section A: totals" style={{ gridTemplateColumns: `minmax(110px,1.4fr) repeat(${sCols.length}, minmax(0,1fr))` }}>
-        <span className="th" role="columnheader">{h.crop === 'Corn' ? 'ENTITY' : 'IRR / DRY'}</span>
-        {sCols.map((c) => <span key={c.key} className="th num" role="columnheader">{c.label.toUpperCase()}</span>)}
-        {h.summary.map((r) => (
-          <div key={r.label} className={`sv-a-row${r.label === 'Total' ? ' total' : ''}`} role="row" style={{ display: 'contents' }}>
-            <span className="lbl" role="cell">{r.label}</span>
-            {sCols.map((c) => <span key={c.key} className="num" role="cell">{fmt(r[c.key], c.fmt)}</span>)}
-          </div>))}
+      <div className="sv-a-scroll">{/* scrolls sideways on a phone; no box on the wall */}
+        <div className="sv-a" role="table" aria-label="Section A: totals" style={{ gridTemplateColumns: `minmax(110px,1.4fr) repeat(${sCols.length}, minmax(0,1fr))` }}>
+          <span className="th" role="columnheader">{h.crop === 'Corn' ? 'ENTITY' : 'IRR / DRY'}</span>
+          {sCols.map((c) => <span key={c.key} className="th num" role="columnheader">{c.label.toUpperCase()}</span>)}
+          {h.summary.map((r) => (
+            <div key={r.label} className={`sv-a-row${r.label === 'Total' ? ' total' : ''}`} role="row" style={{ display: 'contents' }}>
+              <span className="lbl" role="cell">{r.label}</span>
+              {sCols.map((c) => <span key={c.key} className="num" role="cell">{fmt(r[c.key], c.fmt)}</span>)}
+            </div>))}
+        </div>
       </div>
 
       <div className="sv-b-head">

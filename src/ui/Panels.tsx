@@ -35,9 +35,13 @@ export function derive(s: HubState, season: Season, now: Date): Derived {
 
 const TONE_LABEL: Record<Tone, string> = { risk: 'Before rain', active: 'Working', need: 'Needs water', wait: 'Waiting', none: 'No data', done: 'Done' }
 
+/** Rows the field board shows on a phone or tablet before "Show all" (styles.css hides the rest; keep the two in step). */
+const PHONE_ROWS = 8
+
 /* FIELD BOARD -------------------------------------------------------------------------------------- */
 export function FieldBoard({ s, d, compact, onPick }: { s: HubState; d: Derived; compact?: boolean; onPick: (f: FieldRow) => void }) {
   const [crop, setCrop] = useState('all')
+  const [all, setAll] = useState(false) // a phone shows the first rows until asked for the rest
   const rows = d.rows.filter((r) => crop === 'all' || r.field.crop === crop)
   const total = s.fields.reduce((a, f) => a + f.plannedAcres, 0)
   const tones = useMemo(() => {
@@ -63,7 +67,7 @@ export function FieldBoard({ s, d, compact, onPick }: { s: HubState; d: Derived;
     )
   }
   return (
-    <section className="panel" aria-label="Field board" style={{ flex: '0 0 470px' }}>
+    <section className="panel board" aria-label="Field board" style={{ flex: '0 0 470px' }}>
       <div className="ph">
         <span className="code">FIELD BOARD</span><span className="sub">{sub}</span><span className="grow" />
         {wx && <span className="fb-wx">{wx.days.slice(0, 5).map((x, i) => (
@@ -77,7 +81,7 @@ export function FieldBoard({ s, d, compact, onPick }: { s: HubState; d: Derived;
         <span className="hint">SORTED: NEEDS ACTION FIRST{wx && heavyRainAhead(wx) ? ` · RAIN ${heavyRainAhead(wx)!.name} = HARVEST BEFORE ${heavyRainAhead(wx)!.name}` : ''}</span>
       </div>
       <div className="pb flush">
-        <div className="table" role="table" aria-label="Fields">
+        <div className={`table${all ? ' all' : ''}`} role="table" aria-label="Fields">
           <div className="tr th" role="row">
             {['FARM / FIELD', 'CROP', 'AC', 'WATER', 'STATUS', 'LAST OPERATION', 'NEXT'].map((h, i) => <span key={h} role="columnheader" className={i === 2 ? 'num' : undefined}>{h}</span>)}
           </div>
@@ -93,6 +97,7 @@ export function FieldBoard({ s, d, compact, onPick }: { s: HubState; d: Derived;
             </button>
           ))}
         </div>
+        {rows.length > PHONE_ROWS && <button className="fb-more" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${rows.length} fields`}</button>}
       </div>
       <div className="fb-foot">
         <span>One row per field from <a href={FIELD_MASTER_URL} target="_blank" rel="noopener">{FIELD_MASTER_SOURCE}</a>. Status from Deere Ops Center, Pivot Log and the NWS forecast.</span>

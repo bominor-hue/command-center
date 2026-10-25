@@ -279,6 +279,7 @@ button.line:hover b{color:var(--gold)}
 .sv-kpis .kpi .v{font-size:25px}
 .sv-kpis .kpi .v small{font-size:15px;color:var(--fg4)}
 .sv-kpis .kpi .v.txt{font-family:var(--sans);font-size:13px;font-weight:500;line-height:1.3;padding-top:3px}
+.sv-a-scroll{display:contents}
 .sv-a{display:grid;column-gap:10px;margin:0 14px;padding:4px 0 6px;border-top:1px solid var(--line);flex:none;font-size:12.5px}
 .sv-a > *{padding:3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sv-a .th{font-size:10.5px;font-weight:600;letter-spacing:.1em;color:var(--fg4)}
@@ -438,26 +439,104 @@ a.tile:hover .appicon{transform:translateY(-2px) scale(1.06)}
 @keyframes breathe{0%,100%{opacity:1}50%{opacity:.45}}
 @media (prefers-reduced-motion: reduce){.ticker .run{transform:none}.bar .fill{transform:none}.sv-pace .fill{transform:none}}
 
-/* Phone and small screens: panels stacked, page scrolls (PRD v2 phone layout, early) */
+/* Phone and small screens: one column, page scrolls. The wall's columns dissolve (display:contents)
+   so panels can be ordered by urgency: Needs you, the season's lead panel, the rest of its row, then
+   launch, news and the agents. */
+.fb-more{display:none}
 @media (max-width: 1100px){
   html,body{overflow:auto}
-  .stage-wrap{width:auto;height:auto;display:block}
+  .stage-wrap{width:auto;height:auto;min-height:100vh;display:block;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
   .stage{width:auto;height:auto;padding:10px;transform:none!important}
   .hdr{height:auto;flex-wrap:wrap;padding:10px 12px;gap:8px}
   .hdr nav{order:5;width:100%;margin:0;overflow-x:auto}
   .season{height:auto;flex-wrap:wrap;padding:12px}
   .season .note{width:100%}
   .main{display:flex;flex-direction:column}
-  .row4{display:flex;flex-direction:column}
-  .panel{max-height:none}
+  .col,.row4,.lead{display:contents!important} /* !important: the lead wrapper sets display:flex inline */
+  .main .panel{flex:none!important;max-height:none;order:3}
+  .main .panel[aria-label="Needs you"]{order:1}
+  .main .board,.main .lead > .panel{order:2}
+  .main .panel[aria-label="Quick launch"]{order:4}
+  .main .panel[aria-label="News feed"]{order:5}
+  .main .panel[aria-label="Agents"],.main .panel[aria-label="Agent flow"],.main .panel[aria-label="Task an agent"]{order:6}
   .pb{overflow:visible}
   .table{overflow-x:auto}
   .table .tr{grid-template-columns:200px 70px 50px 46px 120px 200px 180px;width:max-content}
   .sv-band{grid-template-columns:1fr}
-  .sv-a,.sv-b{overflow-x:auto}
+  .sv-a-scroll{display:block;flex:none;overflow-x:auto;margin:0 14px}
+  .sv-a{width:max-content;min-width:100%;margin:0}
+  .sv-b{overflow-x:auto}
   .sv-b .tr{width:max-content;min-width:100%}
+  .table:not(.all) .tr:nth-child(n+10){display:none} /* header row + PHONE_ROWS */
+  .fb-more{display:block;width:100%;height:44px;font-size:13px;font-weight:600;color:var(--gold);border-top:1px solid var(--line)}
   .ftr{height:auto;flex-wrap:wrap;white-space:normal;padding:8px 12px;gap:10px}
-  .ticker{overflow-x:auto}
+  .ticker{overflow:hidden}
+}
+
+/* Phone: compact header, a season bar that fits a thumb, field rows as two-line cards */
+@media (max-width: 760px){
+  .stage{padding:8px;gap:8px}
+  .hdr{padding:10px 12px;gap:6px 10px}
+  .hdr nav{display:none} /* only MAIN works until v2; the disabled tabs are noise on a phone */
+  .hdr .mark{font-size:19px}
+  .hdr .name{font-size:10.5px;padding-left:10px;letter-spacing:.18em}
+  .hdr .clock{order:1;margin-left:auto;padding:0;gap:6px}
+  .hdr .clock > span:first-child{display:none}
+  .hdr .clock .time{font-size:15px}
+  .hdr .grow{display:none}
+  .hdr::after{content:'';order:2;flex-basis:100%;height:0} /* line break: badge and buttons go below */
+  .hdr .badge{order:3;margin-right:auto}
+  .hdr .btn{order:4;height:32px;padding:0 14px}
+  .ticker{height:28px;font-size:12px}
+  .ticker .k{padding-left:14px;padding-right:12px}
+  .banner{font-size:13px;padding:8px 12px}
+
+  .season{gap:10px;padding:12px 12px 10px}
+  .season .lbl{width:100%;flex-direction:row;align-items:baseline;justify-content:space-between}
+  .season .lbl span:last-child{font-size:24px}
+  .season .track{flex-basis:100%}
+  .season .segs{height:40px}
+  .season .seg{top:3px;height:34px;font-size:10.5px;padding:0;letter-spacing:-.02em;white-space:nowrap;overflow:visible}
+  .season .months{font-size:10px;letter-spacing:.02em}
+  .season .months span{white-space:nowrap;overflow:visible}
+  .season .months span:nth-child(even):not(.now){visibility:hidden}
+  .season .months .now ~ span{visibility:hidden}
+  .season .note{font-size:12.5px}
+
+  .ph{height:auto;min-height:40px;flex-wrap:wrap;row-gap:4px;padding:8px 14px}
+  .ph .sub{flex:1 1 0;min-width:0}
+  .board .ph .grow{display:none}
+  .fb-wx{order:9;flex-basis:100%;overflow-x:auto;font-size:11.5px}
+  .tabs{padding:8px 10px}
+  .tabs button{min-height:32px;padding:4px 12px}
+  .tabs .hint{margin-left:0;flex-basis:100%;padding:2px 2px 0;line-height:1.4}
+
+  /* Field rows: name and status on top, crop · acres · water and the next step below */
+  .table{overflow:visible}
+  .table .th{display:none}
+  .table .tr{width:auto;grid-template-columns:auto auto minmax(0,1fr) auto;
+    grid-template-areas:"name name name st" "crop ac water water" "next next next next";gap:2px 10px;padding:8px 14px;min-height:0}
+  .table .tr > :nth-child(1){grid-area:name;font-size:14px}
+  .table .tr > :nth-child(2){grid-area:crop;color:var(--fg3);font-size:12px}
+  .table .tr > :nth-child(3){grid-area:ac;text-align:left;color:var(--fg3);font-size:12px}
+  .table .tr > :nth-child(3)::after{content:' ac'}
+  .table .tr > :nth-child(4){grid-area:water;color:var(--fg4);font-size:12px}
+  .table .tr > :nth-child(5){grid-area:st;justify-self:end}
+  .table .tr > :nth-child(6){display:none}
+  .table .tr > :nth-child(7){grid-area:next;white-space:normal;font-size:13px}
+  .fb-foot{flex-direction:column;gap:4px}
+
+  .tiles{grid-template-columns:repeat(4,1fr);gap:6px;padding:10px}
+  .tile{min-height:72px;font-size:11.5px}
+  .news .h{font-size:15px}
+  .news a{padding:11px 14px}
+  .agent{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"an st" "now now";gap:2px 10px;padding:9px 10px}
+  .agent .an{grid-area:an} .agent .badge{grid-area:st;justify-self:end} .agent .now{grid-area:now;white-space:normal}
+  .step{grid-template-columns:76px minmax(0,1fr);row-gap:0}
+  .step .d{grid-column:2;white-space:normal}
+  .kv{grid-template-columns:110px 1fr}
+  .sheet{width:auto;max-width:calc(100vw - 24px)}
+  .ftr{font-size:11px}
 }
 
 /* Sprays (growing season) */
